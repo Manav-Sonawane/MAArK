@@ -1,6 +1,7 @@
 package com.maark.controller;
 
 import javafx.application.Platform;
+import javafx.scene.web.WebEngine;
 import com.maark.model.SearchResult;
 import com.maark.service.SearchService;
 import com.maark.provider.WikipediaProvider;
@@ -14,11 +15,13 @@ public class SearchController {
     
     private final ListView<String> resultsList;
     private final Label statusLabel;
+    private final WebEngine webEngine;
     private final SearchService searchService;
 
-    public SearchController(ListView<String> resultsList, Label statusLabel) {
+    public SearchController(ListView<String> resultsList, Label statusLabel, WebEngine webEngine) {
         this.resultsList = resultsList;
         this.statusLabel = statusLabel;
+        this.webEngine = webEngine;
 
         this.searchService = new SearchService(List.of(new WikipediaProvider()));
     }
@@ -45,5 +48,18 @@ public class SearchController {
             }
         };
         new Thread(task).start();
+    }
+
+    public String extractUrl(String resultString) {
+        if (resultString == null || resultString.trim().isEmpty()) {
+            return null;
+        }
+
+        String[] lines = resultString.split("\n");
+        if (lines.length >= 2) {
+            return lines[1].trim();
+        }
+
+        return null;
     }
 }
