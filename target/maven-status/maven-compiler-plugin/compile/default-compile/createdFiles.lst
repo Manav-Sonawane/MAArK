@@ -1,9 +1,11 @@
 com\maark\exception\ProviderException.class
 com\maark\App.class
 com\maark\provider\WikipediaProvider.class
+com\maark\service\SearchService.class
 com\maark\model\SearchQuery.class
 com\maark\controller\SearchController.class
 com\maark\exception\SearchException.class
 com\maark\model\SearchResult.class
 com\maark\provider\SearchProvider.class
 com\maark\ui\MaarkApp.class
+com\maark\controller\SearchController$1.class
