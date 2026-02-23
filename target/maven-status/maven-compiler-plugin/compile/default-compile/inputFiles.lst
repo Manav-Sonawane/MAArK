@@ -1,3 +1,9 @@
 C:\Users\Manav Sonawane\maark\src\main\java\com\maark\App.java
 C:\Users\Manav Sonawane\maark\src\main\java\com\maark\controller\SearchController.java
+C:\Users\Manav Sonawane\maark\src\main\java\com\maark\exception\ProviderException.java
+C:\Users\Manav Sonawane\maark\src\main\java\com\maark\exception\SearchException.java
+C:\Users\Manav Sonawane\maark\src\main\java\com\maark\model\SearchQuery.java
+C:\Users\Manav Sonawane\maark\src\main\java\com\maark\model\SearchResult.java
+C:\Users\Manav Sonawane\maark\src\main\java\com\maark\provider\SearchProvider.java
+C:\Users\Manav Sonawane\maark\src\main\java\com\maark\provider\WikipediaProvider.java
 C:\Users\Manav Sonawane\maark\src\main\java\com\maark\ui\MaarkApp.java
