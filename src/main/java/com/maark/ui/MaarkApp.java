@@ -123,134 +123,14 @@ public class MaarkApp extends Application {
 
     private void applyLightTheme() {
         scene.getStylesheets().clear();
-        
-        String lightTheme = """
-            .root {
-                -fx-background-color: #f5f5f5;
-            }
-            .title {
-                -fx-font-size: 26px;
-                -fx-font-weight: bold;
-                -fx-text-fill: #1a1a1a;
-            }
-            .theme-toggle {
-                -fx-background-color: #e0e0e0;
-                -fx-text-fill: #1a1a1a;
-                -fx-border-color: #cccccc;
-                -fx-border-radius: 5px;
-                -fx-background-radius: 5px;
-                -fx-padding: 5 15 5 15;
-                -fx-cursor: hand;
-            }
-            .theme-toggle:hover {
-                -fx-background-color: #d0d0d0;
-            }
-            .search-field {
-                -fx-background-color: white;
-                -fx-text-fill: #1a1a1a;
-                -fx-prompt-text-fill: #888888;
-                -fx-border-color: #cccccc;
-                -fx-border-radius: 5px;
-                -fx-background-radius: 5px;
-            }
-            .search-button {
-                -fx-background-color: #2196F3;
-                -fx-text-fill: white;
-                -fx-border-radius: 5px;
-                -fx-background-radius: 5px;
-                -fx-cursor: hand;
-            }
-            .search-button:hover {
-                -fx-background-color: #1976D2;
-            }
-            .results-list {
-                -fx-background-color: white;
-                -fx-border-color: #cccccc;
-                -fx-border-radius: 5px;
-            }
-            .results-list .list-cell {
-                -fx-background-color: white;
-                -fx-text-fill: #1a1a1a;
-            }
-            .results-list .list-cell:selected {
-                -fx-background-color: #2196F3;
-                -fx-text-fill: white;
-            }
-            .status-label {
-                -fx-text-fill: #666666;
-            }
-            .split-pane {
-                -fx-background-color: #f5f5f5;
-            }
-        """;
-        
-        scene.getRoot().setStyle(lightTheme);
+        String stylesheet = getClass().getResource("/styles/light-theme.css").toExternalForm();
+        scene.getStylesheets().add(stylesheet);
     }
 
     private void applyDarkTheme() {
         scene.getStylesheets().clear();
-        
-        String darkTheme = """
-            .root {
-                -fx-background-color: #1e1e1e;
-            }
-            .title {
-                -fx-font-size: 26px;
-                -fx-font-weight: bold;
-                -fx-text-fill: #ffffff;
-            }
-            .theme-toggle {
-                -fx-background-color: #3c3c3c;
-                -fx-text-fill: #ffffff;
-                -fx-border-color: #555555;
-                -fx-border-radius: 5px;
-                -fx-background-radius: 5px;
-                -fx-padding: 5 15 5 15;
-                -fx-cursor: hand;
-            }
-            .theme-toggle:hover {
-                -fx-background-color: #4c4c4c;
-            }
-            .search-field {
-                -fx-background-color: #2d2d2d;
-                -fx-text-fill: #ffffff;
-                -fx-prompt-text-fill: #888888;
-                -fx-border-color: #555555;
-                -fx-border-radius: 5px;
-                -fx-background-radius: 5px;
-            }
-            .search-button {
-                -fx-background-color: #0d47a1;
-                -fx-text-fill: white;
-                -fx-border-radius: 5px;
-                -fx-background-radius: 5px;
-                -fx-cursor: hand;
-            }
-            .search-button:hover {
-                -fx-background-color: #1565c0;
-            }
-            .results-list {
-                -fx-background-color: #2d2d2d;
-                -fx-border-color: #555555;
-                -fx-border-radius: 5px;
-            }
-            .results-list .list-cell {
-                -fx-background-color: #2d2d2d;
-                -fx-text-fill: #e0e0e0;
-            }
-            .results-list .list-cell:selected {
-                -fx-background-color: #0d47a1;
-                -fx-text-fill: white;
-            }
-            .status-label {
-                -fx-text-fill: #aaaaaa;
-            }
-            .split-pane {
-                -fx-background-color: #1e1e1e;
-            }
-        """;
-        
-        scene.getRoot().setStyle(darkTheme);
+        String stylesheet = getClass().getResource("/styles/dark-theme.css").toExternalForm();
+        scene.getStylesheets().add(stylesheet);
     }
 
     public static void main(String[] args) {
