@@ -4,6 +4,10 @@ import javafx.application.Platform;
 import javafx.scene.web.WebEngine;
 import com.maark.model.SearchResult;
 import com.maark.service.SearchService;
+import com.maark.provider.DuckDuckGoProvider;
+import com.maark.provider.HackerNewsProvider;
+import com.maark.provider.RedditProvider;
+import com.maark.provider.StackOverflowProvider;
 import com.maark.provider.WikipediaProvider;
 import javafx.concurrent.Task;
 import javafx.scene.control.Label;
@@ -12,7 +16,7 @@ import javafx.scene.control.ListView;
 import java.util.List;
 
 public class SearchController {
-    
+
     private final ListView<String> resultsList;
     private final Label statusLabel;
     private final WebEngine webEngine;
@@ -23,11 +27,16 @@ public class SearchController {
         this.statusLabel = statusLabel;
         this.webEngine = webEngine;
 
-        this.searchService = new SearchService(List.of(new WikipediaProvider()));
+        this.searchService = new SearchService(List.of(
+                new WikipediaProvider(),
+                new DuckDuckGoProvider(),
+                new StackOverflowProvider(),
+                new RedditProvider(),
+                new HackerNewsProvider()));
     }
 
-    public void handleSearch(String query){
-        Task<Void> task = new Task<Void>(){
+    public void handleSearch(String query) {
+        Task<Void> task = new Task<Void>() {
             @Override
             protected Void call() {
                 try {
@@ -37,11 +46,10 @@ public class SearchController {
 
                     Platform.runLater(() -> {
                         resultsList.getItems().setAll(
-                            results.stream().map(Object::toString).toList()
-                        );
+                                results.stream().map(Object::toString).toList());
                         statusLabel.setText("Results: " + results.size());
                     });
-                } catch (Exception e){
+                } catch (Exception e) {
                     Platform.runLater(() -> statusLabel.setText("Error: " + e.getMessage()));
                 }
                 return null;
