@@ -5,6 +5,7 @@ com\maark\controller\SearchController.class
 com\maark\model\SearchResult.class
 com\maark\provider\RedditProvider.class
 com\maark\ui\MaarkApp.class
+com\maark\ui\MaarkApp$1.class
 com\maark\exception\ProviderException.class
 com\maark\provider\WikipediaProvider.class
 com\maark\service\SearchService.class
