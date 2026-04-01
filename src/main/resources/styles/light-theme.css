@@ -67,10 +67,6 @@
   -fx-background-color: #e0e0e0;
 }
 
-.results-pane {
-  -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.2), 10, 0, 0, 5);
-}
-
 .results-list {
   -fx-background-color: white;
   -fx-border-color: #cccccc;
@@ -97,4 +93,8 @@
 .status-label {
   -fx-text-fill: #666666;
   -fx-font-size: 12px;
+}
+
+.loading-bar {
+  -fx-accent: #2196F3;
 }

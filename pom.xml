@@ -62,6 +62,16 @@
                 <version>0.0.8</version>
                 <configuration>
                     <mainClass>com.maark.ui.MaarkApp</mainClass>
+                    <options>
+                        <option>-Dprism.order=es2,sw</option>
+                        <option>-Dprism.vsync=false</option>
+                        <option>-Dprism.maxvram=512M</option>
+                        <option>-Djavafx.animation.fullspeed=true</option>
+                        <option>-XX:+UseG1GC</option>
+                        <option>-XX:+UseStringDeduplication</option>
+                        <option>-Xms256m</option>
+                        <option>-Xmx1024m</option>
+                    </options>
                 </configuration>
             </plugin>
         </plugins>

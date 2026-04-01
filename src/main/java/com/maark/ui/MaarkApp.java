@@ -27,9 +27,15 @@ public class MaarkApp extends Application {
     private WebView webView;
     private VBox resultsPane;
     private SearchController controller;
+    private ProgressBar loadingBar;
 
     @Override
     public void start(Stage stage) {
+        // Enable hardware acceleration and performance optimizations
+        System.setProperty("prism.order", "es2,sw");
+        System.setProperty("prism.vsync", "false");
+        System.setProperty("javafx.animation.fullspeed", "true");
+        
         Button backBtn = new Button("◀");
         Button forwardBtn = new Button("▶");
         Button reloadBtn = new Button("↻");
@@ -60,6 +66,16 @@ public class MaarkApp extends Application {
         toolbar.getStyleClass().add("toolbar");
         toolbar.getChildren().addAll(backBtn, forwardBtn, reloadBtn, homeBtn, searchField, searchBtn, themeToggle);
 
+        // Add loading progress bar
+        loadingBar = new ProgressBar();
+        loadingBar.setPrefHeight(3);
+        loadingBar.setMaxWidth(Double.MAX_VALUE);
+        loadingBar.setVisible(false);
+        loadingBar.getStyleClass().add("loading-bar");
+
+        VBox topContainer = new VBox();
+        topContainer.getChildren().addAll(toolbar, loadingBar);
+
         resultsList = new ListView<>();
         resultsList.getStyleClass().add("results-list");
 
@@ -71,6 +87,19 @@ public class MaarkApp extends Application {
 
         webView = new WebView();
         WebEngine webEngine = webView.getEngine();
+        
+        // Enable WebView performance optimizations
+        webEngine.setJavaScriptEnabled(true);
+        webEngine.setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
+        
+        // Enable caching (improves repeat page loads)
+        try {
+            java.lang.reflect.Method setCache = webEngine.getClass().getDeclaredMethod("setDataDirectoryCreated", Boolean.TYPE);
+            setCache.setAccessible(true);
+            setCache.invoke(webEngine, true);
+        } catch (Exception ex) {
+            // Cache setting failed, continue anyway
+        }
 
         statusLabel = new Label("Ready.");
         statusLabel.getStyleClass().add("status-label");
@@ -149,15 +178,21 @@ public class MaarkApp extends Application {
         webEngine.getLoadWorker().stateProperty().addListener((obs, oldState, newState) -> {
             if (newState == Worker.State.RUNNING) {
                 statusLabel.setText("Loading: " + webEngine.getLocation());
+                loadingBar.setVisible(true);
                 if (!webEngine.getLocation().isEmpty() && !webEngine.getLocation().startsWith("data:text/html")) {
                     searchField.setText(webEngine.getLocation());
                 }
             } else if (newState == Worker.State.SUCCEEDED) {
                 statusLabel.setText("Done.");
+                loadingBar.setVisible(false);
             } else if (newState == Worker.State.FAILED) {
                 statusLabel.setText("Failed to load: " + webEngine.getLocation());
+                loadingBar.setVisible(false);
             }
         });
+        
+        // Bind loading progress
+        loadingBar.progressProperty().bind(webEngine.getLoadWorker().progressProperty());
 
         StackPane centerPane = new StackPane();
         centerPane.getChildren().addAll(webView, resultsPane);
@@ -167,7 +202,7 @@ public class MaarkApp extends Application {
         StackPane.setMargin(resultsPane, new Insets(0, 0, 0, 0));
 
         root = new BorderPane();
-        root.setTop(toolbar);
+        root.setTop(topContainer);
         root.setCenter(centerPane);
         root.setBottom(bottomBar);
 
