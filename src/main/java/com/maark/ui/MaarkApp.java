@@ -55,15 +55,10 @@ public class MaarkApp extends Application {
         searchField.setPromptText("Search or enter address");
         searchField.setPrefHeight(35);
         searchField.getStyleClass().add("search-field");
+        HBox.setHgrow(searchField, Priority.ALWAYS);
 
         suggestionList = new ListView<>();
         suggestionList.setMaxHeight(150);
-        suggestionList.setVisible(false);
-        suggestionList.setManaged(false);
-        suggestionList.getStyleClass().add("suggestion-list");
-
-        VBox searchBox = new VBox(searchField, suggestionList);
-        HBox.setHgrow(searchBox, Priority.ALWAYS);
 
         searchBtn = new Button("🔍");
         searchBtn.setPrefHeight(35);
@@ -73,7 +68,8 @@ public class MaarkApp extends Application {
         toolbar.setAlignment(Pos.CENTER_LEFT);
         toolbar.setPadding(new Insets(10));
         toolbar.getStyleClass().add("toolbar");
-        toolbar.getChildren().addAll(backBtn, forwardBtn, reloadBtn, homeBtn, searchBox, searchBtn, themeToggle);
+        // Only searchField is added here, suggestionList is managed by Popup in SearchController
+        toolbar.getChildren().addAll(backBtn, forwardBtn, reloadBtn, homeBtn, searchField, searchBtn, themeToggle);
 
         // Add loading progress bar
         loadingBar = new ProgressBar();

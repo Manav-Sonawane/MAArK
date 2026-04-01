@@ -17,6 +17,8 @@ import javafx.scene.control.ListView;
 import javafx.scene.control.TextField;
 import javafx.scene.layout.VBox;
 import javafx.scene.input.MouseButton;
+import javafx.stage.Popup;
+import javafx.geometry.Bounds;
 
 import java.util.List;
 import java.util.stream.Collectors;
@@ -30,6 +32,7 @@ public class SearchController {
     private final WebEngine webEngine;
     private final SearchService searchService;
     private final HistoryManager historyManager;
+    private final Popup popup;
 
     public SearchController(TextField searchField, ListView<String> suggestionList, ListView<SearchResult> resultsList, Label statusLabel, WebEngine webEngine) {
         this.searchField = searchField;
@@ -45,6 +48,11 @@ public class SearchController {
                 new StackOverflowProvider(),
                 new RedditProvider(),
                 new HackerNewsProvider()));
+                
+        this.popup = new Popup();
+        this.popup.setAutoHide(true);
+        this.popup.getContent().add(suggestionList);
+        this.suggestionList.prefWidthProperty().bind(searchField.widthProperty());
                 
         setupListView();
         setupSuggestions();
@@ -100,14 +108,11 @@ public class SearchController {
             }
         });
 
-        searchField.focusedProperty().addListener((obs, wasFocused, isFocused) -> hideIfFocusLost(isFocused));
-        suggestionList.focusedProperty().addListener((obs, wasFocused, isFocused) -> hideIfFocusLost(isFocused));
-    }
-
-    private void hideIfFocusLost(boolean isFocused) {
-        if (!isFocused && !searchField.isFocused() && !suggestionList.isFocused()) {
-            hideSuggestions();
-        }
+        searchField.focusedProperty().addListener((obs, wasFocused, isFocused) -> {
+            if (!isFocused && !suggestionList.isFocused()) {
+                hideSuggestions();
+            }
+        });
     }
 
     private void updateAndShowSuggestions(String text) {
@@ -122,14 +127,19 @@ public class SearchController {
             hideSuggestions();
         } else {
             suggestionList.getItems().setAll(matches);
-            suggestionList.setVisible(true);
-            suggestionList.setManaged(true);
+            if (!popup.isShowing() && searchField.getScene() != null && searchField.getScene().getWindow() != null) {
+                Bounds bounds = searchField.localToScreen(searchField.getBoundsInLocal());
+                if (bounds != null) {
+                    popup.show(searchField, bounds.getMinX(), bounds.getMaxY());
+                }
+            }
         }
     }
 
     private void hideSuggestions() {
-        suggestionList.setVisible(false);
-        suggestionList.setManaged(false);
+        if (popup.isShowing()) {
+            popup.hide();
+        }
     }
 
     public void handleSearch(String query) {
