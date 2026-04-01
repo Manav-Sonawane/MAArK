@@ -1,14 +1,13 @@
 package com.maark.provider;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.maark.exception.ProviderException;
 import com.maark.model.SearchQuery;
 import com.maark.model.SearchResult;
+import com.maark.util.SearchContext;
 
 import java.net.URI;
 import java.net.URLEncoder;
-import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
@@ -17,9 +16,6 @@ import java.util.List;
 
 public class StackOverflowProvider implements SearchProvider {
 
-    private final HttpClient client = HttpClient.newHttpClient();
-    private final ObjectMapper mapper = new ObjectMapper();
-
     @Override
     public String getName() {
         return "StackOverflow";
@@ -27,6 +23,7 @@ public class StackOverflowProvider implements SearchProvider {
 
     @Override
     public List<SearchResult> search(SearchQuery query) throws ProviderException {
+        System.out.println("Provider: " + getName() + " started");
         try {
             String encoded = URLEncoder.encode(query.getText(), StandardCharsets.UTF_8);
             String url = "https://api.stackexchange.com/2.3/search?order=desc&sort=relevance&site=stackoverflow&intitle="
@@ -38,13 +35,13 @@ public class StackOverflowProvider implements SearchProvider {
                     .GET()
                     .build();
 
-            HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+            HttpResponse<String> response = SearchContext.CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
 
             if (response.statusCode() != 200) {
                 throw new ProviderException("StackOverflow returned status: " + response.statusCode());
             }
 
-            JsonNode root = mapper.readTree(response.body());
+            JsonNode root = SearchContext.MAPPER.readTree(response.body());
             JsonNode items = root.path("items");
 
             List<SearchResult> results = new ArrayList<>();

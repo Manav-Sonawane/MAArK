@@ -15,6 +15,9 @@ import java.util.stream.Collectors;
 
 public class SearchService {
     private final List<SearchProvider> providers;
+    
+    // Shared ExecutorService reused for all searches
+    private static final ExecutorService EXECUTOR = Executors.newFixedThreadPool(10);
 
     public SearchService(List<SearchProvider> providers) {
         this.providers = providers;
@@ -22,7 +25,6 @@ public class SearchService {
 
     public List<SearchResult> search(String rawQuery) throws SearchException {
         SearchQuery query = new SearchQuery(rawQuery);
-        ExecutorService executor = Executors.newFixedThreadPool(Math.max(1, providers.size()));
 
         try {
             List<CompletableFuture<List<SearchResult>>> futures = providers.stream()
@@ -32,7 +34,7 @@ public class SearchService {
                         } catch (Exception e) {
                             throw new RuntimeException(e);
                         }
-                    }, executor)
+                    }, EXECUTOR)
                             .orTimeout(5, TimeUnit.SECONDS)
                             .exceptionally(ex -> new ArrayList<>()))
                     .collect(Collectors.toList());
@@ -44,8 +46,14 @@ public class SearchService {
                     .map(CompletableFuture::join)
                     .flatMap(List::stream)
                     .collect(Collectors.toList());
-        } finally {
-            executor.shutdown();
+        } catch (Exception e) {
+            throw new SearchException("Search failed");
+        }
+    }
+    
+    public void shutdown() {
+        if (!EXECUTOR.isShutdown()) {
+            EXECUTOR.shutdown();
         }
     }
 }

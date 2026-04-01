@@ -1,14 +1,13 @@
 package com.maark.provider;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.maark.exception.ProviderException;
 import com.maark.model.SearchQuery;
 import com.maark.model.SearchResult;
+import com.maark.util.SearchContext;
 
 import java.net.URI;
 import java.net.URLEncoder;
-import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
@@ -17,9 +16,6 @@ import java.util.List;
 
 public class WikipediaProvider implements SearchProvider{
     
-    private final HttpClient client = HttpClient.newHttpClient();
-    private final ObjectMapper mapper = new ObjectMapper();
-
     @Override
     public String getName() {
         return "Wikipedia";
@@ -27,6 +23,7 @@ public class WikipediaProvider implements SearchProvider{
 
     @Override
     public List<SearchResult> search(SearchQuery query) throws ProviderException {
+        System.out.println("Provider: " + getName() + " started");
         try {
             String encoded = URLEncoder.encode(query.getText(), StandardCharsets.UTF_8);
 
@@ -38,7 +35,7 @@ public class WikipediaProvider implements SearchProvider{
                                 .GET()
                                 .build();
 
-            HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+            HttpResponse<String> response = SearchContext.CLIENT.send(request, HttpResponse.BodyHandlers.ofString());
 
             if (response.statusCode() != 200) {
                 throw new ProviderException("Wikipedia returned status: " + response.statusCode());
@@ -50,7 +47,7 @@ public class WikipediaProvider implements SearchProvider{
                 throw new ProviderException("Unexpected response from Wikipedia.");
             }
 
-            JsonNode root = mapper.readTree(body);
+            JsonNode root = SearchContext.MAPPER.readTree(body);
             JsonNode searchArray = root.path("query").get("search");
 
             List<SearchResult> results = new ArrayList<>();

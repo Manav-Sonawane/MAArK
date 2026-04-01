@@ -21,7 +21,8 @@ public class MaarkApp extends Application {
     private BorderPane root;
     private TextField searchField;
     private Button searchBtn;
-    private ListView<String> resultsList;
+    private ListView<String> suggestionList;
+    private ListView<com.maark.model.SearchResult> resultsList;
     private Label statusLabel;
     private ToggleButton themeToggle;
     private WebView webView;
@@ -54,7 +55,15 @@ public class MaarkApp extends Application {
         searchField.setPromptText("Search or enter address");
         searchField.setPrefHeight(35);
         searchField.getStyleClass().add("search-field");
-        HBox.setHgrow(searchField, Priority.ALWAYS);
+
+        suggestionList = new ListView<>();
+        suggestionList.setMaxHeight(150);
+        suggestionList.setVisible(false);
+        suggestionList.setManaged(false);
+        suggestionList.getStyleClass().add("suggestion-list");
+
+        VBox searchBox = new VBox(searchField, suggestionList);
+        HBox.setHgrow(searchBox, Priority.ALWAYS);
 
         searchBtn = new Button("🔍");
         searchBtn.setPrefHeight(35);
@@ -64,7 +73,7 @@ public class MaarkApp extends Application {
         toolbar.setAlignment(Pos.CENTER_LEFT);
         toolbar.setPadding(new Insets(10));
         toolbar.getStyleClass().add("toolbar");
-        toolbar.getChildren().addAll(backBtn, forwardBtn, reloadBtn, homeBtn, searchField, searchBtn, themeToggle);
+        toolbar.getChildren().addAll(backBtn, forwardBtn, reloadBtn, homeBtn, searchBox, searchBtn, themeToggle);
 
         // Add loading progress bar
         loadingBar = new ProgressBar();
@@ -109,7 +118,7 @@ public class MaarkApp extends Application {
         bottomBar.setPadding(new Insets(2, 5, 2, 5));
         bottomBar.getStyleClass().add("bottom-bar");
 
-        controller = new SearchController(resultsList, statusLabel, webEngine) {
+        controller = new SearchController(searchField, suggestionList, resultsList, statusLabel, webEngine) {
             @Override
             public void handleSearch(String query) {
                 if (query.startsWith("http://") || query.startsWith("https://")) {
@@ -164,13 +173,10 @@ public class MaarkApp extends Application {
 
         resultsList.setOnMouseClicked(e -> {
             if (e.getButton() == MouseButton.PRIMARY && e.getClickCount() == 1) {
-                String selectedResult = resultsList.getSelectionModel().getSelectedItem();
+                com.maark.model.SearchResult selectedResult = resultsList.getSelectionModel().getSelectedItem();
                 if (selectedResult != null) {
-                    String url = controller.extractUrl(selectedResult);
-                    if (url != null && !url.isEmpty()) {
-                        webEngine.load(url);
-                        hideResults();
-                    }
+                    controller.handleResultClick(selectedResult);
+                    hideResults();
                 }
             }
         });

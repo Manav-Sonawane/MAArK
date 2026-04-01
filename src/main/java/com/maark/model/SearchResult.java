@@ -18,4 +18,9 @@ public class SearchResult {
     public String toString() {
         return title + " [" + source + "]\n" + url + "\n" + snippet;
     }
+
+    public String getTitle() { return title; }
+    public String getUrl() { return url; }
+    public String getSnippet() { return snippet; }
+    public String getSource() { return source; }
 }
