@@ -2,6 +2,10 @@ C:\Users\Manav Sonawane\maark\src\main\java\com\maark\App.java
 C:\Users\Manav Sonawane\maark\src\main\java\com\maark\controller\SearchController.java
 C:\Users\Manav Sonawane\maark\src\main\java\com\maark\exception\ProviderException.java
 C:\Users\Manav Sonawane\maark\src\main\java\com\maark\exception\SearchException.java
+C:\Users\Manav Sonawane\maark\src\main\java\com\maark\local\LocalDocument.java
+C:\Users\Manav Sonawane\maark\src\main\java\com\maark\local\LocalIndexer.java
+C:\Users\Manav Sonawane\maark\src\main\java\com\maark\local\LocalSearchService.java
+C:\Users\Manav Sonawane\maark\src\main\java\com\maark\local\SampleDataLoader.java
 C:\Users\Manav Sonawane\maark\src\main\java\com\maark\manager\HistoryManager.java
 C:\Users\Manav Sonawane\maark\src\main\java\com\maark\model\BrowseHistoryEntry.java
 C:\Users\Manav Sonawane\maark\src\main\java\com\maark\model\SearchHistoryEntry.java

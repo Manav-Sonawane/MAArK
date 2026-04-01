@@ -1,9 +1,14 @@
 package com.maark.service;
 
 import com.maark.exception.SearchException;
+import com.maark.local.LocalDocument;
+import com.maark.local.LocalIndexer;
+import com.maark.local.LocalSearchService;
+import com.maark.local.SampleDataLoader;
 import com.maark.model.SearchQuery;
 import com.maark.model.SearchResult;
 import com.maark.provider.SearchProvider;
+import org.apache.lucene.store.Directory;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -15,18 +20,37 @@ import java.util.stream.Collectors;
 
 public class SearchService {
     private final List<SearchProvider> providers;
-    
+
     // Shared ExecutorService reused for all searches
     private static final ExecutorService EXECUTOR = Executors.newFixedThreadPool(10);
 
+    // Local Lucene search — initialized once at startup
+    private final LocalSearchService localSearchService;
+
     public SearchService(List<SearchProvider> providers) {
         this.providers = providers;
+        this.localSearchService = initLocalSearch();
+    }
+
+    private LocalSearchService initLocalSearch() {
+        try {
+            Directory directory = LocalIndexer.createInMemoryDirectory();
+            LocalIndexer indexer = new LocalIndexer(directory);
+            List<LocalDocument> docs = SampleDataLoader.load();
+            indexer.indexDocuments(docs);
+            System.out.println("Local index built: " + docs.size() + " documents");
+            return new LocalSearchService(directory, indexer.getAnalyzer());
+        } catch (Exception e) {
+            System.err.println("Failed to initialize local search index: " + e.getMessage());
+            return null;
+        }
     }
 
     public List<SearchResult> search(String rawQuery) throws SearchException {
         SearchQuery query = new SearchQuery(rawQuery);
 
         try {
+            // Provider futures (parallel)
             List<CompletableFuture<List<SearchResult>>> futures = providers.stream()
                     .map(provider -> CompletableFuture.supplyAsync(() -> {
                         try {
@@ -39,18 +63,30 @@ public class SearchService {
                             .exceptionally(ex -> new ArrayList<>()))
                     .collect(Collectors.toList());
 
-            CompletableFuture<Void> allOf = CompletableFuture.allOf(futures.toArray(new CompletableFuture[0]));
-            allOf.join();
+            // Local search future (reuses same executor)
+            CompletableFuture<List<SearchResult>> localFuture = localSearchService != null
+                    ? CompletableFuture.supplyAsync(() -> localSearchService.search(rawQuery), EXECUTOR)
+                            .orTimeout(3, TimeUnit.SECONDS)
+                            .exceptionally(ex -> new ArrayList<>())
+                    : CompletableFuture.completedFuture(new ArrayList<>());
 
-            return futures.stream()
+            // Wait for all
+            List<CompletableFuture<List<SearchResult>>> all = new ArrayList<>(futures);
+            all.add(localFuture);
+            CompletableFuture.allOf(all.toArray(new CompletableFuture[0])).join();
+
+            // Merge: local results first for immediate relevance, then provider results
+            List<SearchResult> results = new ArrayList<>(localFuture.join());
+            futures.stream()
                     .map(CompletableFuture::join)
-                    .flatMap(List::stream)
-                    .collect(Collectors.toList());
+                    .forEach(results::addAll);
+
+            return results;
         } catch (Exception e) {
             throw new SearchException("Search failed");
         }
     }
-    
+
     public void shutdown() {
         if (!EXECUTOR.isShutdown()) {
             EXECUTOR.shutdown();
