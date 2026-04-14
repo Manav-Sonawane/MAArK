@@ -7,6 +7,7 @@ import com.maark.local.LocalSearchService;
 import com.maark.local.SampleDataLoader;
 import com.maark.model.SearchQuery;
 import com.maark.model.SearchResult;
+import com.maark.privacy.QueryEnhancer;
 import com.maark.provider.SearchProvider;
 import org.apache.lucene.store.Directory;
 
@@ -26,6 +27,12 @@ public class SearchService {
 
     // Local Lucene search — initialized once at startup
     private final LocalSearchService localSearchService;
+
+    // Result post-processor: dedup + ranking
+    private final ResultProcessor resultProcessor = new ResultProcessor();
+    
+    // Privacy query enhancer
+    private final QueryEnhancer queryEnhancer = new QueryEnhancer(true);
 
     public SearchService(List<SearchProvider> providers) {
         this.providers = providers;
@@ -47,7 +54,8 @@ public class SearchService {
     }
 
     public List<SearchResult> search(String rawQuery) throws SearchException {
-        SearchQuery query = new SearchQuery(rawQuery);
+        String enhancedQueryText = queryEnhancer.enhance(rawQuery);
+        SearchQuery query = new SearchQuery(enhancedQueryText);
 
         try {
             // Provider futures (parallel)
@@ -75,13 +83,15 @@ public class SearchService {
             all.add(localFuture);
             CompletableFuture.allOf(all.toArray(new CompletableFuture[0])).join();
 
-            // Merge: local results first for immediate relevance, then provider results
-            List<SearchResult> results = new ArrayList<>(localFuture.join());
+            // Merge all raw results
+            List<SearchResult> merged = new ArrayList<>(localFuture.join());
             futures.stream()
                     .map(CompletableFuture::join)
-                    .forEach(results::addAll);
+                    .forEach(merged::addAll);
 
-            return results;
+            // Deduplicate → Rank → Return
+            return resultProcessor.process(merged, rawQuery);
+
         } catch (Exception e) {
             throw new SearchException("Search failed");
         }

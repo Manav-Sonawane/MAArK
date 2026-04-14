@@ -43,6 +43,7 @@ public class SearchController {
         this.historyManager = new HistoryManager();
 
         this.searchService = new SearchService(List.of(
+                new com.maark.provider.StartpageProvider(),
                 new WikipediaProvider(),
                 new DuckDuckGoProvider(),
                 new StackOverflowProvider(),

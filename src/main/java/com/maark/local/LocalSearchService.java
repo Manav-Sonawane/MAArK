@@ -52,7 +52,7 @@ public class LocalSearchService {
                             ? content.substring(0, 150) + "..."
                             : content;
 
-                    results.add(new SearchResult(title, snippet != null ? snippet : "", url != null ? url : "", "Local"));
+                    results.add(new SearchResult(title, url != null ? url : "", snippet != null ? snippet : "", "Local"));
                 }
             }
         } catch (Exception e) {

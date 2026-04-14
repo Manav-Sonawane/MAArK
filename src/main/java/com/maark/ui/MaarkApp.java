@@ -1,6 +1,11 @@
 package com.maark.ui;
 
 import com.maark.controller.SearchController;
+import com.maark.privacy.AdBlockService;
+import com.maark.privacy.BreachAlertService;
+import com.maark.privacy.FingerprintAwarenessPanel;
+import com.maark.privacy.PrivacyShieldManager;
+import com.maark.util.SearchContext;
 import javafx.application.Application;
 import javafx.concurrent.Worker;
 import javafx.geometry.Insets;
@@ -30,6 +35,12 @@ public class MaarkApp extends Application {
     private SearchController controller;
     private ProgressBar loadingBar;
 
+    // Privacy Services
+    private PrivacyShieldManager privacyShield;
+    private FingerprintAwarenessPanel fpPanel;
+    private AdBlockService adBlockService;
+    private BreachAlertService breachAlertService;
+
     @Override
     public void start(Stage stage) {
         // Enable hardware acceleration and performance optimizations
@@ -37,10 +48,39 @@ public class MaarkApp extends Application {
         System.setProperty("prism.vsync", "false");
         System.setProperty("javafx.animation.fullspeed", "true");
         
+        // Initialize privacy managers
+        privacyShield = new PrivacyShieldManager();
+        fpPanel = new FingerprintAwarenessPanel(privacyShield);
+        adBlockService = new AdBlockService(true);
+        breachAlertService = new BreachAlertService(message -> {
+            Alert alert = new Alert(Alert.AlertType.WARNING, message, ButtonType.OK);
+            alert.setHeaderText("Breach Alert Detected!");
+            alert.showAndWait();
+        });
+
         Button backBtn = new Button("◀");
         Button forwardBtn = new Button("▶");
         Button reloadBtn = new Button("↻");
         Button homeBtn = new Button("🏠");
+        
+        ToggleButton shieldToggle = new ToggleButton("🛡️ Shield OFF");
+        shieldToggle.getStyleClass().add("shield-toggle");
+        shieldToggle.setOnAction(e -> {
+            boolean active = privacyShield.toggleShield();
+            shieldToggle.setText(active ? "🛡️ Shield ON" : "🛡️ Shield OFF");
+            if (active) {
+                shieldToggle.setStyle("-fx-text-fill: #4CAF50; -fx-font-weight: bold;");
+                breachAlertService.clearSessionCache(); // clear cache on new ephemeral session
+            } else {
+                shieldToggle.setStyle("");
+            }
+            // Update global HTTP Client for Proxy
+            SearchContext.setClient(privacyShield.buildPrivacyHttpClient());
+            // Update WebEngine UA
+            if (webView != null) {
+                webView.getEngine().setUserAgent(privacyShield.getActiveUserAgent());
+            }
+        });
 
         backBtn.getStyleClass().add("nav-btn");
         forwardBtn.getStyleClass().add("nav-btn");
@@ -68,8 +108,7 @@ public class MaarkApp extends Application {
         toolbar.setAlignment(Pos.CENTER_LEFT);
         toolbar.setPadding(new Insets(10));
         toolbar.getStyleClass().add("toolbar");
-        // Only searchField is added here, suggestionList is managed by Popup in SearchController
-        toolbar.getChildren().addAll(backBtn, forwardBtn, reloadBtn, homeBtn, searchField, searchBtn, themeToggle);
+        toolbar.getChildren().addAll(backBtn, forwardBtn, reloadBtn, homeBtn, searchField, searchBtn, shieldToggle, themeToggle);
 
         // Add loading progress bar
         loadingBar = new ProgressBar();
@@ -95,7 +134,7 @@ public class MaarkApp extends Application {
         
         // Enable WebView performance optimizations
         webEngine.setJavaScriptEnabled(true);
-        webEngine.setUserAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
+        webEngine.setUserAgent(privacyShield.getActiveUserAgent());
         
         // Enable caching (improves repeat page loads)
         try {
@@ -183,10 +222,13 @@ public class MaarkApp extends Application {
                 loadingBar.setVisible(true);
                 if (!webEngine.getLocation().isEmpty() && !webEngine.getLocation().startsWith("data:text/html")) {
                     searchField.setText(webEngine.getLocation());
+                    breachAlertService.inspectUrl(webEngine.getLocation());
                 }
             } else if (newState == Worker.State.SUCCEEDED) {
                 statusLabel.setText("Done.");
                 loadingBar.setVisible(false);
+                // Inject AdBlock / Ephemeral session cleanup
+                adBlockService.injectIntoPage(webEngine, privacyShield.isEphemeralEnabled());
             } else if (newState == Worker.State.FAILED) {
                 statusLabel.setText("Failed to load: " + webEngine.getLocation());
                 loadingBar.setVisible(false);
@@ -206,6 +248,7 @@ public class MaarkApp extends Application {
         root = new BorderPane();
         root.setTop(topContainer);
         root.setCenter(centerPane);
+        root.setRight(fpPanel);
         root.setBottom(bottomBar);
 
         scene = new Scene(root, 1200, 700);
@@ -215,17 +258,27 @@ public class MaarkApp extends Application {
 
         stage.setTitle("MAArK Browser");
         stage.setScene(scene);
+        stage.setOnCloseRequest(e -> {
+            fpPanel.shutdown();
+            breachAlertService.shutdown();
+        });
         stage.show();
     }
 
     private void showResults() {
         resultsPane.setVisible(true);
         resultsPane.setManaged(true);
+        // Hide panel when showing results
+        fpPanel.setVisible(false);
+        fpPanel.setManaged(false);
     }
 
     private void hideResults() {
         resultsPane.setVisible(false);
         resultsPane.setManaged(false);
+        // Show panel when browsing
+        fpPanel.setVisible(true);
+        fpPanel.setManaged(true);
     }
 
     private void toggleTheme() {
