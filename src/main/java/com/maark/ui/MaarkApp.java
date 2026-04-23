@@ -70,22 +70,27 @@ public class MaarkApp extends Application {
         historyManager = new com.maark.manager.HistoryManager();
         
         ToggleButton shieldToggle = new ToggleButton("🛡️ Shield OFF");
+        shieldToggle.setSelected(false); // Always starts OFF so homepage loads cleanly
         shieldToggle.getStyleClass().add("shield-toggle");
         shieldToggle.setOnAction(e -> {
             boolean active = privacyShield.toggleShield();
             shieldToggle.setText(active ? "🛡️ Shield ON" : "🛡️ Shield OFF");
             if (active) {
                 shieldToggle.setStyle("-fx-text-fill: #4CAF50; -fx-font-weight: bold;");
-                breachAlertService.clearSessionCache(); // clear cache on new ephemeral session
+                breachAlertService.clearSessionCache();
             } else {
                 shieldToggle.setStyle("");
             }
             // Update global HTTP Client for Proxy
             SearchContext.setClient(privacyShield.buildPrivacyHttpClient());
-            // Update WebEngine UA
+            // Update WebEngine UA + reload current page so changes take effect now
             WebEngine activeEngine = getActiveEngine();
             if (activeEngine != null) {
                 activeEngine.setUserAgent(privacyShield.getActiveUserAgent());
+                String currentUrl = activeEngine.getLocation();
+                if (currentUrl != null && !currentUrl.isEmpty()) {
+                    activeEngine.reload(); // Apply new proxy/UA immediately
+                }
             }
         });
 
@@ -181,9 +186,9 @@ public class MaarkApp extends Application {
                 } else {
                     try {
                         String encoded = java.net.URLEncoder.encode(query, java.nio.charset.StandardCharsets.UTF_8.toString());
-                        engine.load("https://www.startpage.com/sp/search?query=" + encoded);
+                        engine.load("https://duckduckgo.com/?q=" + encoded);
                     } catch (Exception e) {
-                        engine.load("https://www.startpage.com");
+                        engine.load("https://duckduckgo.com");
                     }
                     super.handleSearch(query);
                     hideResults(); 
@@ -191,7 +196,7 @@ public class MaarkApp extends Application {
             }
         };
 
-        createNewTab("https://www.startpage.com");
+        createNewTab("https://duckduckgo.com");
 
         searchBtn.setOnAction(e -> controller.handleSearch(searchField.getText()));
 
@@ -225,12 +230,12 @@ public class MaarkApp extends Application {
         homeBtn.setOnAction(e -> {
             WebEngine engine = getActiveEngine();
             if (engine != null) {
-                engine.load("https://www.startpage.com");
+                engine.load("https://duckduckgo.com");
                 searchField.clear();
                 hideResults();
             }
         });
-        addTabBtn.setOnAction(e -> createNewTab("https://www.startpage.com"));
+        addTabBtn.setOnAction(e -> createNewTab("https://duckduckgo.com"));
         historyBtn.setOnAction(e -> showHistory());
 
         resultsList.setOnMouseClicked(e -> {
@@ -348,7 +353,7 @@ public class MaarkApp extends Application {
             resultsList.getItems().add(new com.maark.model.SearchResult(
                 "🔍 " + s.getQuery(), 
                 "Search History", 
-                "https://www.startpage.com/sp/search?query=" + s.getQuery(),
+                "https://duckduckgo.com/?q=" + s.getQuery(),
                 "Local History"
             ));
         }

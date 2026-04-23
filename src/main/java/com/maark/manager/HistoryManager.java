@@ -104,4 +104,11 @@ public class HistoryManager {
         int toIndex = Math.min(limit, browseHistory.size());
         return new ArrayList<>(browseHistory.subList(0, toIndex));
     }
+
+    public synchronized void clearAll() {
+        searchHistory.clear();
+        browseHistory.clear();
+        saveSearchHistory();
+        saveBrowseHistory();
+    }
 }

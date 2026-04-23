@@ -1,8 +1,6 @@
 package com.maark.privacy;
 
 import com.maark.util.SearchContext;
-import javafx.application.Platform;
-import javafx.scene.web.WebEngine;
 
 import java.net.URI;
 import java.net.URLEncoder;
@@ -123,7 +121,7 @@ public class BreachAlertService {
                     String message = "⚠️ BREACH ALERT — " + domain + "\n"
                             + breachCount + " known data breach(es) detected for this site.\n"
                             + "Your credentials may have been compromised. Use a unique password!";
-                    Platform.runLater(() -> alertCallback.accept(message));
+                    alertCallback.accept(message);
                 } else {
                     LOG.info("No known breaches for: " + domain);
                 }

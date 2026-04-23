@@ -1,13 +1,8 @@
 com\maark\App.class
 com\maark\model\SearchQuery.class
-com\maark\controller\SearchController.class
 com\maark\model\SearchResult.class
 com\maark\manager\HistoryManager.class
 com\maark\provider\RedditProvider.class
-com\maark\ui\MaarkApp.class
-com\maark\controller\SearchController$3.class
-com\maark\controller\SearchController$2.class
-com\maark\privacy\FingerprintAwarenessPanel.class
 com\maark\model\SearchHistoryEntry.class
 com\maark\privacy\QueryEnhancer$Intent.class
 com\maark\provider\WikipediaProvider.class
@@ -15,7 +10,6 @@ com\maark\service\SearchService.class
 com\maark\manager\HistoryManager$2.class
 com\maark\privacy\BreachAlertService.class
 com\maark\provider\StackOverflowProvider.class
-com\maark\privacy\AdBlockService.class
 com\maark\service\ResultProcessor.class
 com\maark\privacy\PrivacyShieldManager$FingerprintSnapshot.class
 com\maark\local\LocalDocument.class
@@ -26,12 +20,11 @@ com\maark\local\LocalSearchService.class
 com\maark\local\SampleDataLoader.class
 com\maark\model\BrowseHistoryEntry.class
 com\maark\privacy\PrivacyShieldManager.class
-com\maark\ui\MaarkApp$1.class
 com\maark\exception\ProviderException.class
 com\maark\manager\HistoryManager$1.class
 com\maark\local\LocalIndexer.class
+com\maark\api\ApiServer.class
 com\maark\util\SearchContext.class
 com\maark\provider\DuckDuckGoProvider.class
 com\maark\exception\SearchException.class
 com\maark\provider\SearchProvider.class
-com\maark\controller\SearchController$1.class

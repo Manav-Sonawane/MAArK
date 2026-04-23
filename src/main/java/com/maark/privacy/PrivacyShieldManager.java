@@ -2,6 +2,7 @@ package com.maark.privacy;
 
 import java.net.InetSocketAddress;
 import java.net.ProxySelector;
+import java.net.Socket;
 import java.net.http.HttpClient;
 import java.time.Duration;
 import java.util.List;
@@ -76,11 +77,52 @@ public class PrivacyShieldManager {
     public void setProxy(boolean on) {
         proxyEnabled.set(on);
         if (on) {
-            activeProxyNode = PROXY_NODES.get(rng.nextInt(PROXY_NODES.size()));
-            LOG.info("Proxy activated: " + activeProxyNode[0] + ":" + activeProxyNode[1]);
+            // Try each proxy node and pick the first reachable one
+            String[] chosen = null;
+            List<String[]> shuffled = new java.util.ArrayList<>(PROXY_NODES);
+            java.util.Collections.shuffle(shuffled, rng);
+            for (String[] node : shuffled) {
+                if (isReachable(node[0], Integer.parseInt(node[1]), 2000)) {
+                    chosen = node;
+                    break;
+                }
+            }
+            if (chosen != null) {
+                activeProxyNode = chosen;
+                // Apply to JVM so WebView (WebKit) also uses this proxy
+                System.setProperty("socksProxyHost", chosen[0]);
+                System.setProperty("socksProxyPort", chosen[1]);
+                System.setProperty("socksProxyVersion", "5");
+                LOG.info("Proxy activated: " + chosen[0] + ":" + chosen[1]);
+            } else {
+                // No working proxy found — silently fall back to direct
+                activeProxyNode = null;
+                proxyEnabled.set(false);
+                clearJvmProxy();
+                LOG.warning("No reachable proxy found — falling back to direct connection.");
+            }
         } else {
             activeProxyNode = null;
+            clearJvmProxy();
             LOG.info("Proxy deactivated — using direct connection.");
+        }
+    }
+
+    /** Clears JVM-level proxy system properties. */
+    private void clearJvmProxy() {
+        System.clearProperty("socksProxyHost");
+        System.clearProperty("socksProxyPort");
+        System.clearProperty("socksProxyVersion");
+    }
+
+    /** Quick TCP reachability check with a timeout. */
+    private boolean isReachable(String host, int port, int timeoutMs) {
+        try (Socket s = new Socket()) {
+            s.connect(new InetSocketAddress(host, port), timeoutMs);
+            return true;
+        } catch (Exception e) {
+            LOG.warning("Proxy unreachable: " + host + ":" + port);
+            return false;
         }
     }
 
