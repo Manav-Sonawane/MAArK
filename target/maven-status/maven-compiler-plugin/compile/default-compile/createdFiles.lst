@@ -5,6 +5,7 @@ com\maark\model\SearchResult.class
 com\maark\manager\HistoryManager.class
 com\maark\provider\RedditProvider.class
 com\maark\ui\MaarkApp.class
+com\maark\controller\SearchController$3.class
 com\maark\controller\SearchController$2.class
 com\maark\privacy\FingerprintAwarenessPanel.class
 com\maark\model\SearchHistoryEntry.class

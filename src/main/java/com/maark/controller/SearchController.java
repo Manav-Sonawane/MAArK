@@ -29,7 +29,7 @@ public class SearchController {
     private final ListView<String> suggestionList;
     private final ListView<SearchResult> resultsList;
     private final Label statusLabel;
-    private final WebEngine webEngine;
+    private WebEngine webEngine;
     private final SearchService searchService;
     private final HistoryManager historyManager;
     private final Popup popup;
@@ -114,6 +114,41 @@ public class SearchController {
                 hideSuggestions();
             }
         });
+
+        // Key-based navigation and search triggering
+        searchField.setOnKeyPressed(e -> {
+            switch (e.getCode()) {
+                case DOWN -> {
+                    if (popup.isShowing()) {
+                        suggestionList.requestFocus();
+                        suggestionList.getSelectionModel().selectFirst();
+                    }
+                }
+                case ENTER -> {
+                    String selected = suggestionList.getSelectionModel().getSelectedItem();
+                    if (popup.isShowing() && selected != null) {
+                        searchField.setText(selected);
+                        hideSuggestions();
+                    }
+                    handleSearch(searchField.getText());
+                }
+                case ESCAPE -> hideSuggestions();
+            }
+        });
+
+        suggestionList.setOnKeyPressed(e -> {
+            if (e.getCode() == javafx.scene.input.KeyCode.ENTER) {
+                String selected = suggestionList.getSelectionModel().getSelectedItem();
+                if (selected != null) {
+                    searchField.setText(selected);
+                    hideSuggestions();
+                    handleSearch(selected);
+                }
+            } else if (e.getCode() == javafx.scene.input.KeyCode.ESCAPE) {
+                hideSuggestions();
+                searchField.requestFocus();
+            }
+        });
     }
 
     private void updateAndShowSuggestions(String text) {
@@ -172,6 +207,10 @@ public class SearchController {
             historyManager.addBrowse(result.getUrl(), result.getTitle());
             webEngine.load(result.getUrl());
         }
+    }
+
+    public void setWebEngine(WebEngine webEngine) {
+        this.webEngine = webEngine;
     }
 
     public List<com.maark.model.SearchHistoryEntry> getRecentSearches(int limit) {

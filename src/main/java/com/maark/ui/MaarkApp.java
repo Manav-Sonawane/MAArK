@@ -18,6 +18,7 @@ import javafx.scene.layout.*;
 import javafx.scene.web.WebEngine;
 import javafx.scene.web.WebView;
 import javafx.stage.Stage;
+import java.util.List;
 
 public class MaarkApp extends Application {
 
@@ -30,10 +31,11 @@ public class MaarkApp extends Application {
     private ListView<com.maark.model.SearchResult> resultsList;
     private Label statusLabel;
     private ToggleButton themeToggle;
-    private WebView webView;
+    private TabPane tabPane;
     private VBox resultsPane;
     private SearchController controller;
     private ProgressBar loadingBar;
+    private com.maark.manager.HistoryManager historyManager;
 
     // Privacy Services
     private PrivacyShieldManager privacyShield;
@@ -62,6 +64,10 @@ public class MaarkApp extends Application {
         Button forwardBtn = new Button("▶");
         Button reloadBtn = new Button("↻");
         Button homeBtn = new Button("🏠");
+        Button addTabBtn = new Button("+");
+        Button historyBtn = new Button("📜 History");
+        
+        historyManager = new com.maark.manager.HistoryManager();
         
         ToggleButton shieldToggle = new ToggleButton("🛡️ Shield OFF");
         shieldToggle.getStyleClass().add("shield-toggle");
@@ -77,8 +83,9 @@ public class MaarkApp extends Application {
             // Update global HTTP Client for Proxy
             SearchContext.setClient(privacyShield.buildPrivacyHttpClient());
             // Update WebEngine UA
-            if (webView != null) {
-                webView.getEngine().setUserAgent(privacyShield.getActiveUserAgent());
+            WebEngine activeEngine = getActiveEngine();
+            if (activeEngine != null) {
+                activeEngine.setUserAgent(privacyShield.getActiveUserAgent());
             }
         });
 
@@ -108,7 +115,7 @@ public class MaarkApp extends Application {
         toolbar.setAlignment(Pos.CENTER_LEFT);
         toolbar.setPadding(new Insets(10));
         toolbar.getStyleClass().add("toolbar");
-        toolbar.getChildren().addAll(backBtn, forwardBtn, reloadBtn, homeBtn, searchField, searchBtn, shieldToggle, themeToggle);
+        toolbar.getChildren().addAll(backBtn, forwardBtn, reloadBtn, homeBtn, addTabBtn, searchField, searchBtn, historyBtn, shieldToggle, themeToggle);
 
         // Add loading progress bar
         loadingBar = new ProgressBar();
@@ -129,21 +136,25 @@ public class MaarkApp extends Application {
         resultsPane.getStyleClass().add("results-pane");
         VBox.setVgrow(resultsList, Priority.ALWAYS);
 
-        webView = new WebView();
-        WebEngine webEngine = webView.getEngine();
+        tabPane = new TabPane();
+        tabPane.getStyleClass().add("browser-tab-pane");
+        HBox.setHgrow(tabPane, Priority.ALWAYS);
+        VBox.setVgrow(tabPane, Priority.ALWAYS);
+
+        // Selection listener to sync UI with active tab
+        tabPane.getSelectionModel().selectedItemProperty().addListener((obs, oldTab, newTab) -> {
+            if (newTab != null) {
+                WebView view = (WebView) newTab.getContent();
+                WebEngine engine = view.getEngine();
+                controller.setWebEngine(engine);
+                searchField.setText(engine.getLocation());
+                loadingBar.progressProperty().unbind();
+                loadingBar.progressProperty().bind(engine.getLoadWorker().progressProperty());
+                loadingBar.setVisible(engine.getLoadWorker().getState() == Worker.State.RUNNING);
+            }
+        });
         
-        // Enable WebView performance optimizations
-        webEngine.setJavaScriptEnabled(true);
-        webEngine.setUserAgent(privacyShield.getActiveUserAgent());
-        
-        // Enable caching (improves repeat page loads)
-        try {
-            java.lang.reflect.Method setCache = webEngine.getClass().getDeclaredMethod("setDataDirectoryCreated", Boolean.TYPE);
-            setCache.setAccessible(true);
-            setCache.invoke(webEngine, true);
-        } catch (Exception ex) {
-            // Cache setting failed, continue anyway
-        }
+
 
         statusLabel = new Label("Ready.");
         statusLabel.getStyleClass().add("status-label");
@@ -153,21 +164,34 @@ public class MaarkApp extends Application {
         bottomBar.setPadding(new Insets(2, 5, 2, 5));
         bottomBar.getStyleClass().add("bottom-bar");
 
-        controller = new SearchController(searchField, suggestionList, resultsList, statusLabel, webEngine) {
+        // Temporary dummy engine for controller initialization
+        controller = new SearchController(searchField, suggestionList, resultsList, statusLabel, null) {
             @Override
             public void handleSearch(String query) {
+                if (query.isEmpty()) return;
+                WebEngine engine = getActiveEngine();
+                if (engine == null) return;
+
                 if (query.startsWith("http://") || query.startsWith("https://")) {
-                    webEngine.load(query);
+                    engine.load(query);
                     hideResults();
-                } else if (!query.isEmpty() && query.contains(".") && !query.contains(" ")) {
-                    webEngine.load("https://" + query);
+                } else if (query.contains(".") && !query.contains(" ")) {
+                    engine.load("https://" + query);
                     hideResults();
                 } else {
+                    try {
+                        String encoded = java.net.URLEncoder.encode(query, java.nio.charset.StandardCharsets.UTF_8.toString());
+                        engine.load("https://www.startpage.com/sp/search?query=" + encoded);
+                    } catch (Exception e) {
+                        engine.load("https://www.startpage.com");
+                    }
                     super.handleSearch(query);
-                    showResults();
+                    hideResults(); 
                 }
             }
         };
+
+        createNewTab("https://www.startpage.com");
 
         searchBtn.setOnAction(e -> controller.handleSearch(searchField.getText()));
 
@@ -178,33 +202,36 @@ public class MaarkApp extends Application {
         });
 
         backBtn.setOnAction(e -> {
-            try {
-                if (webEngine.getHistory().getCurrentIndex() > 0) {
-                    webEngine.getHistory().go(-1);
-                    hideResults();
-                }
-            } catch (Exception ex) {
+            WebEngine engine = getActiveEngine();
+            if (engine != null && engine.getHistory().getCurrentIndex() > 0) {
+                engine.getHistory().go(-1);
+                hideResults();
             }
         });
         forwardBtn.setOnAction(e -> {
-            try {
-                if (webEngine.getHistory().getCurrentIndex() < webEngine.getHistory().getEntries().size() - 1) {
-                    webEngine.getHistory().go(1);
-                    hideResults();
-                }
-            } catch (Exception ex) {
+            WebEngine engine = getActiveEngine();
+            if (engine != null && engine.getHistory().getCurrentIndex() < engine.getHistory().getEntries().size() - 1) {
+                engine.getHistory().go(1);
+                hideResults();
             }
         });
         reloadBtn.setOnAction(e -> {
-            webEngine.reload();
-            hideResults();
+            WebEngine engine = getActiveEngine();
+            if (engine != null) {
+                engine.reload();
+                hideResults();
+            }
         });
         homeBtn.setOnAction(e -> {
-            webEngine.loadContent(
-                    "<html><body style='font-family:sans-serif;text-align:center;padding-top:100px;'><h1>MAArK Browser</h1><p>Privacy First Search Engine</p></body></html>");
-            searchField.clear();
-            hideResults();
+            WebEngine engine = getActiveEngine();
+            if (engine != null) {
+                engine.load("https://www.startpage.com");
+                searchField.clear();
+                hideResults();
+            }
         });
+        addTabBtn.setOnAction(e -> createNewTab("https://www.startpage.com"));
+        historyBtn.setOnAction(e -> showHistory());
 
         resultsList.setOnMouseClicked(e -> {
             if (e.getButton() == MouseButton.PRIMARY && e.getClickCount() == 1) {
@@ -216,34 +243,13 @@ public class MaarkApp extends Application {
             }
         });
 
-        webEngine.getLoadWorker().stateProperty().addListener((obs, oldState, newState) -> {
-            if (newState == Worker.State.RUNNING) {
-                statusLabel.setText("Loading: " + webEngine.getLocation());
-                loadingBar.setVisible(true);
-                if (!webEngine.getLocation().isEmpty() && !webEngine.getLocation().startsWith("data:text/html")) {
-                    searchField.setText(webEngine.getLocation());
-                    breachAlertService.inspectUrl(webEngine.getLocation());
-                }
-            } else if (newState == Worker.State.SUCCEEDED) {
-                statusLabel.setText("Done.");
-                loadingBar.setVisible(false);
-                // Inject AdBlock / Ephemeral session cleanup
-                adBlockService.injectIntoPage(webEngine, privacyShield.isEphemeralEnabled());
-            } else if (newState == Worker.State.FAILED) {
-                statusLabel.setText("Failed to load: " + webEngine.getLocation());
-                loadingBar.setVisible(false);
-            }
-        });
-        
-        // Bind loading progress
-        loadingBar.progressProperty().bind(webEngine.getLoadWorker().progressProperty());
 
         StackPane centerPane = new StackPane();
-        centerPane.getChildren().addAll(webView, resultsPane);
+        centerPane.getChildren().addAll(tabPane, resultsPane);
         StackPane.setAlignment(resultsPane, Pos.TOP_CENTER);
         resultsPane.setMaxWidth(800);
         resultsPane.setMaxHeight(500);
-        StackPane.setMargin(resultsPane, new Insets(0, 0, 0, 0));
+        StackPane.setMargin(resultsPane, new Insets(50, 0, 0, 0)); // Lower to accommodate tabs
 
         root = new BorderPane();
         root.setTop(topContainer);
@@ -253,8 +259,6 @@ public class MaarkApp extends Application {
 
         scene = new Scene(root, 1200, 700);
         applyLightTheme();
-
-        homeBtn.fire();
 
         stage.setTitle("MAArK Browser");
         stage.setScene(scene);
@@ -276,9 +280,95 @@ public class MaarkApp extends Application {
     private void hideResults() {
         resultsPane.setVisible(false);
         resultsPane.setManaged(false);
-        // Show panel when browsing
         fpPanel.setVisible(true);
         fpPanel.setManaged(true);
+    }
+
+    private WebEngine getActiveEngine() {
+        Tab activeTab = tabPane.getSelectionModel().getSelectedItem();
+        if (activeTab != null) {
+            return ((WebView) activeTab.getContent()).getEngine();
+        }
+        return null;
+    }
+
+    private void createNewTab(String url) {
+        WebView view = new WebView();
+        WebEngine engine = view.getEngine();
+        
+        engine.setJavaScriptEnabled(true);
+        engine.setUserAgent(privacyShield.getActiveUserAgent());
+        
+        try {
+            java.lang.reflect.Method setCache = engine.getClass().getDeclaredMethod("setDataDirectoryCreated", Boolean.TYPE);
+            setCache.setAccessible(true);
+            setCache.invoke(engine, true);
+        } catch (Exception ex) {}
+
+        Tab tab = new Tab("New Tab", view);
+        tabPane.getTabs().add(tab);
+        tabPane.getSelectionModel().select(tab);
+
+        engine.getLoadWorker().stateProperty().addListener((obs, oldState, newState) -> {
+            if (newState == Worker.State.RUNNING) {
+                statusLabel.setText("Loading: " + engine.getLocation());
+                loadingBar.setVisible(true);
+                if (!engine.getLocation().isEmpty() && !engine.getLocation().startsWith("data:text/html")) {
+                    searchField.setText(engine.getLocation());
+                    breachAlertService.inspectUrl(engine.getLocation());
+                }
+            } else if (newState == Worker.State.SUCCEEDED) {
+                statusLabel.setText("Done.");
+                loadingBar.setVisible(false);
+                adBlockService.injectIntoPage(engine, privacyShield.isEphemeralEnabled());
+                
+                String title = engine.getTitle();
+                if (title == null || title.isEmpty()) title = engine.getLocation();
+                tab.setText(title.length() > 20 ? title.substring(0, 17) + "..." : title);
+                
+                // Add to local history
+                if (!engine.getLocation().startsWith("data:text/html")) {
+                    historyManager.addBrowse(engine.getLocation(), title);
+                }
+            } else if (newState == Worker.State.FAILED) {
+                statusLabel.setText("Failed to load: " + engine.getLocation());
+                loadingBar.setVisible(false);
+            }
+        });
+
+        engine.load(url);
+    }
+
+    private void showHistory() {
+        resultsList.getItems().clear();
+        
+        // Add searches
+        List<com.maark.model.SearchHistoryEntry> searches = historyManager.getRecentSearches(50);
+        for (com.maark.model.SearchHistoryEntry s : searches) {
+            resultsList.getItems().add(new com.maark.model.SearchResult(
+                "🔍 " + s.getQuery(), 
+                "Search History", 
+                "https://www.startpage.com/sp/search?query=" + s.getQuery(),
+                "Local History"
+            ));
+        }
+        
+        // Add browses
+        List<com.maark.model.BrowseHistoryEntry> browses = historyManager.getRecentBrowses(50);
+        for (com.maark.model.BrowseHistoryEntry b : browses) {
+            resultsList.getItems().add(new com.maark.model.SearchResult(
+                "🌐 " + b.getTitle(), 
+                b.getUrl(), 
+                b.getUrl(),
+                "Local History"
+            ));
+        }
+        
+        if (resultsList.getItems().isEmpty()) {
+            resultsList.getItems().add(new com.maark.model.SearchResult("No history found.", "", "", ""));
+        }
+        
+        showResults();
     }
 
     private void toggleTheme() {
