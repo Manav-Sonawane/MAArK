@@ -23,6 +23,8 @@ contextBridge.exposeInMainWorld('maark', {
   setPrivacyConfig:  (cfg) => ipcRenderer.send('privacy:set', cfg),
   getPrivacyConfig:  ()    => ipcRenderer.invoke('privacy:get-config'),
   getUaPool:         ()    => ipcRenderer.invoke('privacy:get-ua-pool'),
+  setMockFingerprint:(en)  => ipcRenderer.send('privacy:mock-fingerprint', en),
+  setProfile:        (id)  => ipcRenderer.send('profile:set', id),
 
   // Dialogs
   answerPermission: (id, allow)           => ipcRenderer.send('permission:answer', { id, allow }),
@@ -32,10 +34,13 @@ contextBridge.exposeInMainWorld('maark', {
   extractText: () => ipcRenderer.invoke('ai:extract-text'),
   askAI: (prompt, text, key) => ipcRenderer.invoke('ai:ask', { prompt, text, key }),
 
+  // Network info (via main process to bypass CORS)
+  getNetworkInfo: () => ipcRenderer.invoke('network:get-info'),
+
   // Event listeners (renderer ← main)
   on: (channel, cb) => {
     const allowed = ['tabs:update','browser:url','browser:loading','browser:secure',
-      'warning:phishing','warning:insecure','permission:request','download:request','privacy:config']
+      'warning:phishing','warning:insecure','permission:request','download:request','privacy:config','biometric:update']
     if (allowed.includes(channel)) ipcRenderer.on(channel, (_, data) => cb(data))
   },
   off: (channel, cb) => ipcRenderer.removeListener(channel, cb),

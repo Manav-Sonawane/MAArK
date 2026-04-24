@@ -10,105 +10,124 @@ import java.io.IOException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
+/**
+ * HistoryManager handles multi-profile history isolation.
+ * Each profile (Personal, Work, Guest, etc.) gets its own persisted JSON file.
+ */
 public class HistoryManager {
 
-    private static final Path SEARCH_HISTORY_FILE = Paths.get(System.getProperty("user.dir"), "search_history.json");
-    private static final Path BROWSE_HISTORY_FILE = Paths.get(System.getProperty("user.dir"), "browse_history.json");
     private static final int MAX_ENTRIES = 100;
-
-    private List<SearchHistoryEntry> searchHistory;
-    private List<BrowseHistoryEntry> browseHistory;
+    
+    // Memory cache: profileName -> history list
+    private final Map<String, List<SearchHistoryEntry>> searchHistories = new HashMap<>();
+    private final Map<String, List<BrowseHistoryEntry>> browseHistories = new HashMap<>();
 
     public HistoryManager() {
-        searchHistory = new ArrayList<>();
-        browseHistory = new ArrayList<>();
-        loadHistory();
+        // Histories are loaded lazily when requested for a profile
     }
 
-    private synchronized void loadHistory() {
-        try {
-            File searchFile = SEARCH_HISTORY_FILE.toFile();
-            if (searchFile.exists() && searchFile.length() > 0) {
-                try {
-                    searchHistory = SearchContext.MAPPER.readValue(searchFile, new TypeReference<List<SearchHistoryEntry>>() {});
-                    System.out.println("Loaded search history: " + searchHistory.size());
-                } catch (Exception e) {
-                    System.err.println("Failed to parse search history, initializing empty list.");
-                    searchHistory = new ArrayList<>();
-                }
-            } else {
-                searchHistory = new ArrayList<>();
-            }
-
-            File browseFile = BROWSE_HISTORY_FILE.toFile();
-            if (browseFile.exists() && browseFile.length() > 0) {
-                try {
-                    browseHistory = SearchContext.MAPPER.readValue(browseFile, new TypeReference<List<BrowseHistoryEntry>>() {});
-                    System.out.println("Loaded browse history: " + browseHistory.size());
-                } catch (Exception e) {
-                    System.err.println("Failed to parse browse history, initializing empty list.");
-                    browseHistory = new ArrayList<>();
-                }
-            } else {
-                browseHistory = new ArrayList<>();
-            }
-        } catch (Exception e) {
-            e.printStackTrace();
-            if (searchHistory == null) searchHistory = new ArrayList<>();
-            if (browseHistory == null) browseHistory = new ArrayList<>();
+    private synchronized void ensureLoaded(String profile) {
+        if (!searchHistories.containsKey(profile)) {
+            searchHistories.put(profile, loadSearchHistory(profile));
+        }
+        if (!browseHistories.containsKey(profile)) {
+            browseHistories.put(profile, loadBrowseHistory(profile));
         }
     }
 
-    private synchronized void saveSearchHistory() {
+    private List<SearchHistoryEntry> loadSearchHistory(String profile) {
+        File file = getSearchFile(profile);
+        if (file.exists() && file.length() > 0) {
+            try {
+                return SearchContext.MAPPER.readValue(file, new TypeReference<List<SearchHistoryEntry>>() {});
+            } catch (Exception e) {
+                System.err.println("Failed to parse search history for " + profile);
+            }
+        }
+        return new ArrayList<>();
+    }
+
+    private List<BrowseHistoryEntry> loadBrowseHistory(String profile) {
+        File file = getBrowseFile(profile);
+        if (file.exists() && file.length() > 0) {
+            try {
+                return SearchContext.MAPPER.readValue(file, new TypeReference<List<BrowseHistoryEntry>>() {});
+            } catch (Exception e) {
+                System.err.println("Failed to parse browse history for " + profile);
+            }
+        }
+        return new ArrayList<>();
+    }
+
+    private synchronized void saveSearchHistory(String profile) {
         try {
-            SearchContext.MAPPER.writeValue(SEARCH_HISTORY_FILE.toFile(), searchHistory);
-            System.out.println("Saved search history: " + searchHistory.size() + " entries.");
+            SearchContext.MAPPER.writeValue(getSearchFile(profile), searchHistories.get(profile));
         } catch (IOException e) {
             e.printStackTrace();
         }
     }
 
-    private synchronized void saveBrowseHistory() {
+    private synchronized void saveBrowseHistory(String profile) {
         try {
-            SearchContext.MAPPER.writeValue(BROWSE_HISTORY_FILE.toFile(), browseHistory);
-            System.out.println("Saved browse history: " + browseHistory.size() + " entries.");
+            SearchContext.MAPPER.writeValue(getBrowseFile(profile), browseHistories.get(profile));
         } catch (IOException e) {
             e.printStackTrace();
         }
     }
 
-    public synchronized void addSearch(String query) {
-        searchHistory.add(0, new SearchHistoryEntry(query, System.currentTimeMillis()));
-        if (searchHistory.size() > MAX_ENTRIES) {
-            searchHistory = new ArrayList<>(searchHistory.subList(0, MAX_ENTRIES));
+    private File getSearchFile(String profile) {
+        String clean = profile.replaceAll("[^a-zA-Z0-9]", "_").toLowerCase();
+        return Paths.get(System.getProperty("user.dir"), clean + "_search_history.json").toFile();
+    }
+
+    private File getBrowseFile(String profile) {
+        String clean = profile.replaceAll("[^a-zA-Z0-9]", "_").toLowerCase();
+        return Paths.get(System.getProperty("user.dir"), clean + "_browse_history.json").toFile();
+    }
+
+    public synchronized void addSearch(String profile, String query) {
+        ensureLoaded(profile);
+        List<SearchHistoryEntry> history = searchHistories.get(profile);
+        history.add(0, new SearchHistoryEntry(query, System.currentTimeMillis()));
+        if (history.size() > MAX_ENTRIES) {
+            searchHistories.put(profile, new ArrayList<>(history.subList(0, MAX_ENTRIES)));
         }
-        saveSearchHistory();
+        saveSearchHistory(profile);
     }
 
-    public synchronized void addBrowse(String url, String title) {
-        browseHistory.add(0, new BrowseHistoryEntry(url, title, System.currentTimeMillis()));
-        if (browseHistory.size() > MAX_ENTRIES) {
-            browseHistory = new ArrayList<>(browseHistory.subList(0, MAX_ENTRIES));
+    public synchronized void addBrowse(String profile, String url, String title) {
+        ensureLoaded(profile);
+        List<BrowseHistoryEntry> history = browseHistories.get(profile);
+        history.add(0, new BrowseHistoryEntry(url, title, System.currentTimeMillis()));
+        if (history.size() > MAX_ENTRIES) {
+            browseHistories.put(profile, new ArrayList<>(history.subList(0, MAX_ENTRIES)));
         }
-        saveBrowseHistory();
+        saveBrowseHistory(profile);
     }
 
-    public synchronized List<SearchHistoryEntry> getRecentSearches(int limit) {
-        int toIndex = Math.min(limit, searchHistory.size());
-        return new ArrayList<>(searchHistory.subList(0, toIndex));
+    public synchronized List<SearchHistoryEntry> getRecentSearches(String profile, int limit) {
+        ensureLoaded(profile);
+        List<SearchHistoryEntry> history = searchHistories.get(profile);
+        int toIndex = Math.min(limit, history.size());
+        return new ArrayList<>(history.subList(0, toIndex));
     }
 
-    public synchronized List<BrowseHistoryEntry> getRecentBrowses(int limit) {
-        int toIndex = Math.min(limit, browseHistory.size());
-        return new ArrayList<>(browseHistory.subList(0, toIndex));
+    public synchronized List<BrowseHistoryEntry> getRecentBrowses(String profile, int limit) {
+        ensureLoaded(profile);
+        List<BrowseHistoryEntry> history = browseHistories.get(profile);
+        int toIndex = Math.min(limit, history.size());
+        return new ArrayList<>(history.subList(0, toIndex));
     }
 
-    public synchronized void clearAll() {
-        searchHistory.clear();
-        browseHistory.clear();
-        saveSearchHistory();
-        saveBrowseHistory();
+    public synchronized void clearAll(String profile) {
+        ensureLoaded(profile);
+        searchHistories.get(profile).clear();
+        browseHistories.get(profile).clear();
+        saveSearchHistory(profile);
+        saveBrowseHistory(profile);
     }
 }

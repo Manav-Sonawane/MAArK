@@ -52,21 +52,24 @@ public class ApiServer {
         // ── History routes ────────────────────────────────────────────────────────
         app.get("/api/history/searches", ctx -> {
             int limit = parseIntParam(ctx, "limit", 50);
-            List<SearchHistoryEntry> entries = historyManager.getRecentSearches(limit);
+            String profile = ctx.header("X-MAArK-Profile");
+            List<SearchHistoryEntry> entries = historyManager.getRecentSearches(profile != null ? profile : "Personal", limit);
             ctx.json(entries);
         });
 
         app.get("/api/history/browses", ctx -> {
             int limit = parseIntParam(ctx, "limit", 50);
-            List<BrowseHistoryEntry> entries = historyManager.getRecentBrowses(limit);
+            String profile = ctx.header("X-MAArK-Profile");
+            List<BrowseHistoryEntry> entries = historyManager.getRecentBrowses(profile != null ? profile : "Personal", limit);
             ctx.json(entries);
         });
 
         app.post("/api/history/search", ctx -> {
             Map<?, ?> body = ctx.bodyAsClass(Map.class);
             String query = (String) body.get("query");
+            String profile = ctx.header("X-MAArK-Profile");
             if (query != null && !query.isBlank()) {
-                historyManager.addSearch(query);
+                historyManager.addSearch(profile != null ? profile : "Personal", query);
                 ctx.json(Map.of("status", "saved"));
             } else {
                 ctx.status(400).json(Map.of("error", "query is required"));
@@ -77,8 +80,9 @@ public class ApiServer {
             Map<?, ?> body = ctx.bodyAsClass(Map.class);
             String url = (String) body.get("url");
             String title = (String) body.get("title");
+            String profile = ctx.header("X-MAArK-Profile");
             if (url != null && !url.isBlank()) {
-                historyManager.addBrowse(url, title != null ? title : url);
+                historyManager.addBrowse(profile != null ? profile : "Personal", url, title != null ? title : url);
                 ctx.json(Map.of("status", "saved"));
             } else {
                 ctx.status(400).json(Map.of("error", "url is required"));
@@ -86,27 +90,30 @@ public class ApiServer {
         });
 
         app.delete("/api/history/clear", ctx -> {
-            historyManager.clearAll();
+            String profile = ctx.header("X-MAArK-Profile");
+            historyManager.clearAll(profile != null ? profile : "Personal");
             ctx.json(Map.of("status", "cleared"));
         });
 
         // ── Search routes ─────────────────────────────────────────────────────────
         app.get("/api/search", ctx -> {
             String query = ctx.queryParam("q");
+            String profile = ctx.header("X-MAArK-Profile");
             if (query == null || query.isBlank()) {
                 ctx.status(400).json(Map.of("error", "q param required"));
                 return;
             }
-            historyManager.addSearch(query);
+            historyManager.addSearch(profile != null ? profile : "Personal", query);
             List<SearchResult> results = searchService.search(query);
             ctx.json(results);
         });
 
         app.get("/api/suggestions", ctx -> {
             String query = ctx.queryParam("q");
+            String profile = ctx.header("X-MAArK-Profile");
             if (query == null) query = "";
             String filter = query.toLowerCase();
-            List<String> suggestions = historyManager.getRecentSearches(100)
+            List<String> suggestions = historyManager.getRecentSearches(profile != null ? profile : "Personal", 100)
                     .stream()
                     .map(SearchHistoryEntry::getQuery)
                     .filter(q -> filter.isEmpty() || q.toLowerCase().contains(filter))

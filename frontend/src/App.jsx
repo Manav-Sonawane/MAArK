@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
+import PrivacyDashboard from './PrivacyDashboard'
 
 const API = window.maark?.api || null
 const MAARK = window.maark
@@ -241,9 +242,9 @@ function Dialogs({ warnings, permissions, downloads, onDismissWarning, onAnswerP
     const w = warnings[0]
     return (
       <div className="dialog-overlay" style={{ pointerEvents: 'auto' }}>
-        <div className="dialog-box" style={{ borderColor: 'var(--accent-red)' }}>
-          <div className="dialog-title" style={{ color: 'var(--accent-red)' }}>
-            ⚠️ {w.type === 'phishing' ? 'Phishing Alert' : 'Insecure Connection'}
+        <div className="dialog-box" style={{ borderColor: w.type === 'permission' ? 'var(--accent-amber)' : 'var(--accent-red)' }}>
+          <div className="dialog-title" style={{ color: w.type === 'permission' ? 'var(--accent-amber)' : 'var(--accent-red)' }}>
+            ⚠️ {w.type === 'phishing' ? 'Deceptive Site Ahead' : w.type === 'image-analyze' ? 'Vision AI Analysis' : w.type === 'permission' ? 'Permission Requested' : w.type === 'download' ? 'File Download' : 'Insecure Connection'}
           </div>
           <div className="dialog-desc">
             {w.type === 'phishing' 
@@ -251,7 +252,7 @@ function Dialogs({ warnings, permissions, downloads, onDismissWarning, onAnswerP
               : w.type === 'image-analyze'
               ? `Sent to Groq Vision API. (Simulated Analysis): "This image at ${w.url.substring(0,30)}... appears to be a natural landscape."`
               : w.type === 'permission'
-              ? `The site at ${w.origin} is requesting permission to access your ${w.permission}.`
+              ? `The site at ${w.origin || 'this page'} is requesting permission to access your ${w.permission}.`
               : w.type === 'download'
               ? `Warning: The site is trying to download a potentially harmful file: ${w.filename}`
               : `The connection to ${w.url} is not secure. Information submitted could be viewed by others.`}
@@ -532,15 +533,101 @@ function HymnTab({ t, groqKey }) {
   )
 }
 
+// ── Profile Selector Component ────────────────────────────────────────────────
+function ProfileSelector({ onSelect }) {
+  const [profiles, setProfiles] = useState(() => {
+    const saved = localStorage.getItem('maark_profiles')
+    return saved ? JSON.parse(saved) : [
+      { id: 'personal', name: 'Personal', icon: '👤', color: 'var(--accent-cyan)' },
+      { id: 'work', name: 'Work', icon: '💼', color: 'var(--accent-amber)' },
+      { id: 'guest', name: 'Guest', icon: '🕵️', color: 'var(--text-muted)' }
+    ]
+  })
+  const [showAdd, setShowAdd] = useState(false)
+  const [newName, setNewName] = useState('')
+
+  const addProfile = () => {
+    if (!newName.trim()) return
+    const id = newName.toLowerCase().replace(/\s+/g, '_')
+    if (profiles.some(p => p.id === id)) return
+    const colors = ['var(--accent-pink)', 'var(--accent-cyan)', 'var(--accent-amber)', '#8b5cf6', '#10b981']
+    const newP = { 
+      id, 
+      name: newName, 
+      icon: '👤', 
+      color: colors[profiles.length % colors.length] 
+    }
+    const updated = [...profiles, newP]
+    setProfiles(updated)
+    localStorage.setItem('maark_profiles', JSON.stringify(updated))
+    setNewName('')
+    setShowAdd(false)
+  }
+
+  const handleSelect = (p) => {
+    if (window.maark?.setProfile) window.maark.setProfile(p.name)
+    onSelect(p)
+  }
+
+  return (
+    <div className="profile-selector-overlay">
+      <div className="profile-selector-container">
+        <h2 style={{ fontSize: 28, marginBottom: 8 }}>Who's opening MAArK?</h2>
+        <p style={{ color: 'var(--text-muted)', marginBottom: 40 }}>Select a profile to isolate your history and sessions.</p>
+        
+        <div className="profile-grid">
+          {profiles.map(p => (
+            <div key={p.id} className="profile-card" onClick={() => handleSelect(p)}>
+              <div className="profile-avatar" style={{ borderColor: p.color, color: p.color }}>
+                {p.icon}
+              </div>
+              <div className="profile-name">{p.name}</div>
+            </div>
+          ))}
+          
+          <div className="profile-card add-profile" onClick={() => setShowAdd(true)}>
+            <div className="profile-avatar" style={{ borderColor: 'rgba(255,255,255,0.1)', borderStyle: 'dashed' }}>
+              +
+            </div>
+            <div className="profile-name">Add Profile</div>
+          </div>
+        </div>
+
+        {showAdd && (
+          <div style={{ marginTop: 40, padding: 24, background: 'rgba(255,255,255,0.03)', borderRadius: 16, border: '1px solid rgba(255,255,255,0.05)', width: '100%', maxWidth: 400 }}>
+            <h3 style={{ marginTop: 0, marginBottom: 16, fontSize: 18 }}>Create New Identity</h3>
+            <input 
+              type="text" 
+              placeholder="Profile Name (e.g. Freelance)" 
+              value={newName}
+              onChange={e => setNewName(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && addProfile()}
+              style={{ width: '100%', padding: '12px 16px', background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, color: '#fff', marginBottom: 16, fontFamily: 'inherit' }}
+              autoFocus
+            />
+            <div style={{ display: 'flex', gap: 12 }}>
+              <button onClick={addProfile} style={{ flex: 1, padding: '10px', background: 'var(--accent-cyan)', color: '#000', border: 'none', borderRadius: 8, fontWeight: 700, cursor: 'pointer' }}>Create</button>
+              <button onClick={() => setShowAdd(false)} style={{ flex: 1, padding: '10px', background: 'rgba(255,255,255,0.05)', color: '#fff', border: 'none', borderRadius: 8, fontWeight: 600, cursor: 'pointer' }}>Cancel</button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 // ── Root App ──────────────────────────────────────────────────────────────────
 export default function App() {
   const [lang, setLang] = useState('en')
   const t = i18n[lang]
 
+  const [selectedProfile, setSelectedProfile] = useState(null)
+  
   const [tabs, setTabs] = useState([])
   const [activeTab, setActiveTab] = useState(null)
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [sidebarTab, setSidebarTab] = useState('privacy')
+  const [showInsights, setShowInsights] = useState(false)
   
   const [config, setConfig] = useState({
     proxyMode: 'direct', incognito: false, adBlock: true, 
@@ -638,6 +725,10 @@ export default function App() {
     MAARK?.resizeSidebar(next ? 320 : 0)
   }
 
+  if (!selectedProfile) {
+    return <ProfileSelector onSelect={setSelectedProfile} />
+  }
+
   return (
     <>
       {!isFullscreen && (
@@ -712,6 +803,20 @@ export default function App() {
             >
               ✨ AI
             </button>
+
+            <button 
+              className={`shield-btn ${activeTab?.url === 'maark://insights' ? 'active' : ''}`}
+              style={{ marginLeft: 8 }}
+              onClick={() => {
+                if (activeTab?.url === 'maark://insights') {
+                  MAARK?.closeTab(activeTab.id)
+                } else {
+                  MAARK?.newTab('maark://insights')
+                }
+              }}
+            >
+              🔍 Insights
+            </button>
             
             <button className={`icon-btn ${sidebarOpen ? 'active' : ''}`} onClick={toggleSidebar}>☰</button>
           </div>
@@ -749,8 +854,8 @@ export default function App() {
         <div className={`sidebar ${sidebarOpen ? 'open' : ''}`}>
             <div className="sidebar-header">
               <h2>
-                {sidebarTab === 'privacy' ? `🛡️ ${t.privacy}` : 
-                 sidebarTab === 'ai' ? `✨ ${t.ai}` : 
+                {sidebarTab === 'privacy' ? `🛡️ ${t.privacy}` :
+                 sidebarTab === 'ai' ? `✨ ${t.ai}` :
                  sidebarTab === 'hymn' ? `🎵 ${t.hymns}` : `📜 ${t.history}`}
               </h2>
               <button className="icon-btn" onClick={toggleSidebar} style={{ fontSize: 16 }}>✕</button>
@@ -770,6 +875,8 @@ export default function App() {
               {sidebarTab === 'history' && <HistoryTab onNavigate={(url) => { MAARK?.navigate(url); toggleSidebar() }} t={t} />}
             </div>
           </div>
+
+          {activeTab?.url === 'maark://insights' && <PrivacyDashboard onClose={() => MAARK?.closeTab(activeTab.id)} />}
         </>
       )}
 

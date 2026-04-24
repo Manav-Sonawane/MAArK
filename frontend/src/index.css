@@ -674,3 +674,70 @@ html, body, #root {
   font-size: 13px;
   box-shadow: var(--shadow-glow);
 }
+
+/* ── Profile Selector ──────────────────────────────────────────────────────── */
+.profile-selector-overlay {
+  position: fixed;
+  inset: 0;
+  background: var(--bg-base);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 10000;
+}
+
+.profile-selector-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 32px;
+}
+
+.profile-selector-container h2 {
+  font-size: 28px;
+  font-weight: 500;
+  color: var(--text-primary);
+  letter-spacing: -0.5px;
+}
+
+.profile-grid {
+  display: flex;
+  gap: 24px;
+}
+
+.profile-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  padding: 24px 32px;
+  border-radius: var(--r-xl);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  cursor: pointer;
+  transition: var(--t-med);
+}
+
+.profile-card:hover {
+  background: var(--bg-raised);
+  transform: translateY(-4px);
+  border-color: var(--border-bright);
+  box-shadow: var(--shadow-glow);
+}
+
+.profile-avatar {
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  border: 3px solid;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  font-size: 32px;
+  background: var(--bg-base);
+}
+
+.profile-name {
+  font-size: 16px;
+  font-weight: 500;
+}
