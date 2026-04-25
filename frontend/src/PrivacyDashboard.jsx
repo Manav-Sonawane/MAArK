@@ -460,7 +460,7 @@ export default function PrivacyDashboard() {
                 </div>
                 
                 <button onClick={() => setCollecting(c => !c)} style={{
-                  padding: '16px 24px', borderRadius: 12, border: 'none', cursor: 'pointer', fontFamily: 'inherit', fontWeight: 600, fontSize: 14, width: 'fit-content',
+                  padding: '16px 24px', borderRadius: 12, cursor: 'pointer', fontFamily: 'inherit', fontWeight: 600, fontSize: 14, width: 'fit-content',
                   background: collecting ? 'rgba(239,68,68,0.1)' : 'rgba(16,185,129,0.1)',
                   color: collecting ? '#ef4444' : '#10b981', border: `1px solid ${collecting ? 'rgba(239,68,68,0.3)' : 'rgba(16,185,129,0.3)'}`
                 }}>

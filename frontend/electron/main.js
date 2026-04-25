@@ -82,6 +82,7 @@ const tabs = new Map()   // tabId → { view, ses, title, url, loading, isSecure
 let activeTabId = null
 let nextTabId   = 1
 let mainWindow  = null
+let uiPort      = 5173   // set by loadUI() once Vite is detected
 const pendingDownloads = new Map()
 const pendingPermissions = new Map()
 
@@ -370,6 +371,11 @@ function createWindow() {
   applyPolicies(session.defaultSession)
   mainWindow.on('resize', setBounds)
   mainWindow.on('closed', () => { mainWindow = null })
+  
+  // Forward console messages
+  mainWindow.webContents.on('console-message', (event, level, message, line, sourceId) => {
+    console.log(`[Browser Console] ${message} (${sourceId}:${line})`);
+  });
 }
 
 // ── IPC handlers ──────────────────────────────────────────────────────────────
@@ -385,9 +391,15 @@ ipcMain.on('biometric:event', (event, type) => {
   }
 })
 
-ipcMain.on('profile:set', (_, profileId) => {
+ipcMain.on('profile:set', async (_, profileId) => {
   activeProfile = profileId
   console.log(`👤 [Identity] Active profile switched to: ${activeProfile}`)
+  
+  // Create the first tab now that profile is selected, if we don't have one
+  if (tabs.size === 0) {
+    const id = await createTab('https://www.startpage.com')
+    switchTab(id)
+  }
 })
 
 ipcMain.on('browser:navigate', (_, url) => {
@@ -460,31 +472,38 @@ let javaProc = null
 async function loadUI() {
   const ports = [5173, 5174, 5175, 5176]
   let success = false
-  
-  // Retry loop to wait for Vite to start
-  for (let i = 0; i < 10; i++) {
+
+  // Give Vite a moment to fully initialize before we start probing
+  await new Promise(r => setTimeout(r, 1000))
+
+  // Retry loop — up to 30 seconds (60 × 500 ms) to find Vite
+  for (let i = 0; i < 60 && !success; i++) {
     for (const port of ports) {
       try {
         await new Promise((resolve, reject) => {
-          const req = http.get(`http://127.0.0.1:${port}`, res => {
+          const req = http.get(`http://localhost:${port}`, res => {
+            res.resume() // drain body so socket is released
             if (res.statusCode === 200) resolve()
-            else reject()
+            else reject(new Error(`status ${res.statusCode}`))
           })
           req.on('error', reject)
-          req.setTimeout(200, () => { req.destroy(); reject() })
+          req.setTimeout(500, () => { req.destroy(); reject(new Error('timeout')) })
         })
-        mainWindow.loadURL(`http://127.0.0.1:${port}`)
+        uiPort = port
+        mainWindow.loadURL(`http://localhost:${port}`)
         console.log(`🎨 [UI] Connected to Vite on port ${port}`)
+        if (isDev) mainWindow.webContents.openDevTools({ mode: 'detach' })
         success = true
         break
-      } catch {}
+      } catch (e) {
+        if (i === 0) console.log(`[UI] Port ${port}: ${e.message}`)
+      }
     }
-    if (success) break
-    await new Promise(r => setTimeout(r, 500)) // Wait 0.5s before next attempt
+    if (!success) await new Promise(r => setTimeout(r, 500))
   }
-  
+
   if (!success) {
-    console.warn('⚠ [UI] Vite not found, falling back to dist/index.html')
+    console.warn('⚠ [UI] Vite not found after 30 s, falling back to dist/index.html')
     mainWindow.loadFile(path.join(__dirname, '../dist/index.html'))
   }
 }
@@ -495,9 +514,8 @@ app.whenReady().then(async () => {
   if (isDev) await loadUI()
   else mainWindow.loadFile(path.join(__dirname, '../dist/index.html'))
   
-  mainWindow.webContents.once('did-finish-load', async () => {
-    const id = await createTab('https://www.startpage.com')
-    switchTab(id)
+  mainWindow.webContents.once('did-finish-load', () => {
+    // We wait for profile:set IPC before creating the first tab.
   })
 })
 
