@@ -32,3 +32,6 @@ build/
 .Trashes
 ehthumbs.db
 Thumbs.db
+
+# Tor Binaries
+frontend/resources/tor/

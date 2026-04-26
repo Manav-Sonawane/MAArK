@@ -57,7 +57,7 @@
   --t-slow: 0.4s cubic-bezier(0.4, 0, 0.2, 1);
 
   /* Toolbar */
-  --toolbar-h: 132px; /* Increased for shortcuts row */
+  --toolbar-h: 124px;
 
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
   font-size: 14px;
@@ -740,4 +740,164 @@ html, body, #root {
 .profile-name {
   font-size: 16px;
   font-weight: 500;
+}
+
+/* ── Home View ─────────────────────────────────────────────────────────────── */
+.home-view {
+  position: absolute;
+  top: var(--toolbar-h);
+  left: 0; right: 0; bottom: 0;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background: var(--bg-base);
+  z-index: 1;
+}
+
+.home-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  max-width: 650px;
+  padding: 40px;
+}
+
+.home-logo {
+  display: flex;
+  font-size: 84px;
+  font-weight: 800;
+  letter-spacing: -4px;
+  margin-bottom: 8px;
+}
+
+.home-logo .logo-m { color: var(--accent-violet); }
+.home-logo .logo-a { color: var(--text-primary); }
+.home-logo .logo-r { color: var(--accent-cyan); }
+.home-logo .logo-k { color: var(--text-primary); }
+
+.home-subtitle {
+  color: var(--text-muted);
+  font-size: 16px;
+  margin-bottom: 48px;
+  letter-spacing: 1px;
+}
+
+.home-search-box {
+  width: 100%;
+  display: flex;
+  gap: 12px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  padding: 8px;
+  border-radius: var(--r-xl);
+  box-shadow: var(--shadow-lg);
+  margin-bottom: 48px;
+  transition: border-color var(--t-fast);
+}
+
+.home-search-box:focus-within {
+  border-color: var(--accent-violet);
+}
+
+.home-search-box input {
+  flex: 1;
+  background: none;
+  border: none;
+  outline: none;
+  color: var(--text-primary);
+  font-size: 18px;
+  padding: 12px 24px;
+}
+
+.home-search-box button {
+  background: var(--accent-violet);
+  color: white;
+  border: none;
+  padding: 0 24px;
+  border-radius: var(--r-lg);
+  font-weight: 600;
+  cursor: pointer;
+  transition: filter var(--t-fast);
+}
+
+.home-search-box button:hover {
+  filter: brightness(1.1);
+}
+
+.home-shortcuts {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 32px;
+  width: 100%;
+}
+
+.shortcut-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  cursor: pointer;
+  transition: transform var(--t-fast);
+}
+
+.shortcut-item:hover {
+  transform: translateY(-4px);
+}
+
+.shortcut-icon {
+  width: 64px;
+  height: 64px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--r-lg);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  font-size: 24px;
+  color: var(--text-secondary);
+  transition: all var(--t-fast);
+}
+
+.shortcut-item:hover .shortcut-icon {
+  border-color: var(--accent-violet);
+  background: var(--bg-raised);
+  color: var(--text-primary);
+  box-shadow: var(--shadow-glow);
+}
+
+.shortcut-title {
+  font-size: 12px;
+  color: var(--text-muted);
+  width: 80px;
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 800px) {
+  .home-logo { font-size: 64px; }
+  .home-shortcuts { grid-template-columns: repeat(3, 1fr); gap: 20px; }
+  .home-search-box input { font-size: 16px; padding: 10px 16px; }
+}
+
+@media (max-width: 600px) {
+  .home-logo { font-size: 48px; }
+  .home-shortcuts { grid-template-columns: repeat(2, 1fr); }
+  .home-search-box { flex-direction: column; padding: 12px; }
+  .home-search-box button { height: 44px; width: 100%; }
+}
+
+/* ── Insights Overlay ─────────────────────────────────────────────────────── */
+.insights-overlay {
+  position: absolute;
+  top: var(--toolbar-h);
+  left: 0; right: 0; bottom: 0;
+  background-color: #0D0D14;
+  z-index: 2000; /* Higher than everything */
+  display: flex;
+  flex-direction: column;
+  color: #f0f0f8;
+  overflow: hidden;
 }
