@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { Bot, ChevronLeft, ChevronRight, RotateCw, Search, Lock, Globe, Shield } from 'lucide-react'
 import PrivacyDashboard from './PrivacyDashboard'
+import Homepage from './components/Homepage'
 
 const API = window.maark?.api || null
 const MAARK = window.maark
@@ -130,11 +132,11 @@ function AddressBar({ currentUrl, loading, isIncognito, isSecure, t }) {
 }
 
 // ── Privacy Dashboard Tab ──────────────────────────────────────────────────────
-function PrivacyTab({ config, onConfigChange, uaPool, t }) {
+function PrivacyTab({ config, onConfigChange, t }) {
   return (
     <div>
       <div className="privacy-card">
-        <h3>Network & Identity</h3>
+        <h3 style={{color: 'red'}}>Network & Identity (v2)</h3>
         <div style={{ marginBottom: 12 }}>
           <label className="toggle-label" style={{ display:'block', marginBottom:4 }}>{t.proxy}</label>
           <select 
@@ -162,6 +164,12 @@ function PrivacyTab({ config, onConfigChange, uaPool, t }) {
           checked={config.uaRandomize} 
           onChange={(v) => onConfigChange({ uaRandomize: v })} 
         />
+
+        <Toggle 
+          label="Route via Tor (Strong Anonymity)" 
+          checked={config.torEnabled} 
+          onChange={(v) => onConfigChange({ torEnabled: v })} 
+        />
         
         <div style={{ marginTop: 12, padding: 8, background: 'var(--bg-glass)', borderRadius: 6 }}>
           <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>CURRENT IDENTITY</div>
@@ -169,6 +177,17 @@ function PrivacyTab({ config, onConfigChange, uaPool, t }) {
             {config.uaRandomize ? 'Rotating randomly' : 'Default (Chrome/Windows)'}
           </div>
         </div>
+
+        <button 
+          onClick={() => window.location.reload()} 
+          style={{ 
+            marginTop: 16, width: '100%', padding: '8px', borderRadius: 6, 
+            background: 'rgba(255,255,255,0.05)', color: '#888', border: '1px solid rgba(255,255,255,0.1)',
+            fontSize: '11px', cursor: 'pointer'
+          }}
+        >
+          🔄 Refresh UI (v2)
+        </button>
       </div>
 
       <div className="privacy-card">
@@ -322,7 +341,7 @@ function Dialogs({ warnings, permissions, downloads, onDismissWarning, onAnswerP
 
 // ── AI Assistant Tab ───────────────────────────────────────────────────────────
 function AITab({ config, onConfigChange }) {
-  const [key, setKey] = useState(config.groqKey || '')
+  const key = config.groqKey || ''
   const [prompt, setPrompt] = useState('Summarize this page')
   const [response, setResponse] = useState('')
   const [loading, setLoading] = useState(false)
@@ -341,21 +360,6 @@ function AITab({ config, onConfigChange }) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-      <div className="privacy-card">
-        <h3>Groq Setup</h3>
-        <input 
-          className="select-input" 
-          type="password"
-          placeholder="Enter Groq API Key..."
-          value={key}
-          onChange={e => {
-            setKey(e.target.value)
-            onConfigChange({ groqKey: e.target.value })
-          }}
-          style={{ width: '100%' }}
-        />
-      </div>
-      
       <div className="privacy-card" style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
         <h3>Ask MAArK AI</h3>
         <select 
@@ -364,11 +368,11 @@ function AITab({ config, onConfigChange }) {
           onChange={e => setPrompt(e.target.value)}
           style={{ marginBottom: 8, width: '100%' }}
         >
-          <option value="Summarize this page">Summarize Page</option>
-          <option value="Extract key points from this page">Extract Key Points</option>
-          <option value="Translate this page to Marathi">Translate to Marathi</option>
-          <option value="Translate this page to Hindi">Translate to Hindi</option>
-          <option value="Explain this page like I'm 5">Explain like I'm 5</option>
+          <option style={{ color: '#000', background: '#fff' }} value="Summarize this page">Summarize Page</option>
+          <option style={{ color: '#000', background: '#fff' }} value="Extract key points from this page">Extract Key Points</option>
+          <option style={{ color: '#000', background: '#fff' }} value="Translate this page to Marathi">Translate to Marathi</option>
+          <option style={{ color: '#000', background: '#fff' }} value="Translate this page to Hindi">Translate to Hindi</option>
+          <option style={{ color: '#000', background: '#fff' }} value="Explain this page like I'm 5">Explain like I'm 5</option>
         </select>
         <button className="btn btn-primary" onClick={handleAsk} disabled={loading} style={{ marginBottom: 12 }}>
           {loading ? 'Processing...' : 'Ask AI ✨'}
@@ -533,105 +537,28 @@ function HymnTab({ t, groqKey }) {
   )
 }
 
-// ── Profile Selector Component ────────────────────────────────────────────────
-function ProfileSelector({ onSelect }) {
-  const [profiles, setProfiles] = useState(() => {
-    const saved = localStorage.getItem('maark_profiles')
-    return saved ? JSON.parse(saved) : [
-      { id: 'personal', name: 'Personal', icon: '👤', color: 'var(--accent-cyan)' },
-      { id: 'work', name: 'Work', icon: '💼', color: 'var(--accent-amber)' },
-      { id: 'guest', name: 'Guest', icon: '🕵️', color: 'var(--text-muted)' }
-    ]
-  })
-  const [showAdd, setShowAdd] = useState(false)
-  const [newName, setNewName] = useState('')
-
-  const addProfile = () => {
-    if (!newName.trim()) return
-    const id = newName.toLowerCase().replace(/\s+/g, '_')
-    if (profiles.some(p => p.id === id)) return
-    const colors = ['var(--accent-pink)', 'var(--accent-cyan)', 'var(--accent-amber)', '#8b5cf6', '#10b981']
-    const newP = { 
-      id, 
-      name: newName, 
-      icon: '👤', 
-      color: colors[profiles.length % colors.length] 
-    }
-    const updated = [...profiles, newP]
-    setProfiles(updated)
-    localStorage.setItem('maark_profiles', JSON.stringify(updated))
-    setNewName('')
-    setShowAdd(false)
-  }
-
-  const handleSelect = (p) => {
-    if (window.maark?.setProfile) window.maark.setProfile(p.name)
-    onSelect(p)
-  }
-
-  return (
-    <div className="profile-selector-overlay">
-      <div className="profile-selector-container">
-        <h2 style={{ fontSize: 28, marginBottom: 8 }}>Who's opening MAArK?</h2>
-        <p style={{ color: 'var(--text-muted)', marginBottom: 40 }}>Select a profile to isolate your history and sessions.</p>
-        
-        <div className="profile-grid">
-          {profiles.map(p => (
-            <div key={p.id} className="profile-card" onClick={() => handleSelect(p)}>
-              <div className="profile-avatar" style={{ borderColor: p.color, color: p.color }}>
-                {p.icon}
-              </div>
-              <div className="profile-name">{p.name}</div>
-            </div>
-          ))}
-          
-          <div className="profile-card add-profile" onClick={() => setShowAdd(true)}>
-            <div className="profile-avatar" style={{ borderColor: 'rgba(255,255,255,0.1)', borderStyle: 'dashed' }}>
-              +
-            </div>
-            <div className="profile-name">Add Profile</div>
-          </div>
-        </div>
-
-        {showAdd && (
-          <div style={{ marginTop: 40, padding: 24, background: 'rgba(255,255,255,0.03)', borderRadius: 16, border: '1px solid rgba(255,255,255,0.05)', width: '100%', maxWidth: 400 }}>
-            <h3 style={{ marginTop: 0, marginBottom: 16, fontSize: 18 }}>Create New Identity</h3>
-            <input 
-              type="text" 
-              placeholder="Profile Name (e.g. Freelance)" 
-              value={newName}
-              onChange={e => setNewName(e.target.value)}
-              onKeyDown={e => e.key === 'Enter' && addProfile()}
-              style={{ width: '100%', padding: '12px 16px', background: 'rgba(0,0,0,0.2)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: 8, color: '#fff', marginBottom: 16, fontFamily: 'inherit' }}
-              autoFocus
-            />
-            <div style={{ display: 'flex', gap: 12 }}>
-              <button onClick={addProfile} style={{ flex: 1, padding: '10px', background: 'var(--accent-cyan)', color: '#000', border: 'none', borderRadius: 8, fontWeight: 700, cursor: 'pointer' }}>Create</button>
-              <button onClick={() => setShowAdd(false)} style={{ flex: 1, padding: '10px', background: 'rgba(255,255,255,0.05)', color: '#fff', border: 'none', borderRadius: 8, fontWeight: 600, cursor: 'pointer' }}>Cancel</button>
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
-  )
-}
-
 // ── Root App ──────────────────────────────────────────────────────────────────
 export default function App() {
   const [lang, setLang] = useState('en')
   const t = i18n[lang]
 
-  const [selectedProfile, setSelectedProfile] = useState(null)
+  const updateConfig = (newCfg) => {
+    setConfig(newCfg)
+    MAARK.setPrivacyConfig(JSON.parse(JSON.stringify(newCfg)))
+  }
+
+  const [selectedProfile, setSelectedProfile] = useState({ id: 'personal', name: 'Personal' })
   
-  const [tabs, setTabs] = useState([])
-  const [activeTab, setActiveTab] = useState(null)
+  const [tabs, setTabs] = useState([{ id: 999, title: 'MAArK Start', isActive: true, url: 'maark://home' }])
+  const [activeTab, setActiveTab] = useState({ id: 999, title: 'MAArK Start', isActive: true, url: 'maark://home' })
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [sidebarTab, setSidebarTab] = useState('privacy')
   const [showInsights, setShowInsights] = useState(false)
   
   const [config, setConfig] = useState({
     proxyMode: 'direct', incognito: false, adBlock: true, 
-    httpsEnforce: true, uaRandomize: true, blockPerms: true, groqKey: ''
+    httpsEnforce: true, uaRandomize: true, blockPerms: true, 
+    torEnabled: false, groqKey: ''
   })
   const [uaPool, setUaPool] = useState([])
 
@@ -671,9 +598,9 @@ export default function App() {
   }, [])
 
   useEffect(() => {
+    console.log("%c MAArK v2 LOADED ", "background: red; color: white; font-weight: bold; padding: 4px;");
     if (!MAARK) return
     
-    // Load initial config
     MAARK.getPrivacyConfig().then(setConfig)
     MAARK.getUaPool().then(setUaPool)
 
@@ -715,18 +642,10 @@ export default function App() {
     return () => clearInterval(int)
   }, [fetchRecent, activeTab?.url])
 
-  const updateConfig = (newCfg) => {
-    MAARK?.setPrivacyConfig(newCfg)
-  }
-
   const toggleSidebar = () => {
     const next = !sidebarOpen
     setSidebarOpen(next)
     MAARK?.resizeSidebar(next ? 320 : 0)
-  }
-
-  if (!selectedProfile) {
-    return <ProfileSelector onSelect={setSelectedProfile} />
   }
 
   return (
@@ -805,10 +724,10 @@ export default function App() {
             </button>
 
             <button 
-              className={`shield-btn ${activeTab?.url === 'maark://insights' ? 'active' : ''}`}
+              className={`shield-btn ${activeTab?.url?.includes('maark://insights') ? 'active' : ''}`}
               style={{ marginLeft: 8 }}
               onClick={() => {
-                if (activeTab?.url === 'maark://insights') {
+                if (activeTab?.url?.includes('maark://insights')) {
                   MAARK?.closeTab(activeTab.id)
                 } else {
                   MAARK?.newTab('maark://insights')
@@ -821,28 +740,26 @@ export default function App() {
             <button className={`icon-btn ${sidebarOpen ? 'active' : ''}`} onClick={toggleSidebar}>☰</button>
           </div>
 
+
+
           <div className="shortcuts-row">
             {recentSites.length === 0 ? (
-              <span style={{ fontSize: 10, color: 'var(--text-muted)', marginLeft: 4 }}>No recent sites yet</span>
+              <span style={{ fontSize: 11, color: 'var(--text-muted)', marginLeft: 8 }}>No recent sites yet</span>
             ) : (
-              recentSites.map((site, i) => (
-                <div 
-                  key={i} 
-                  className="shortcut-item"
-                  onClick={() => MAARK?.navigate(site.url)}
-                  title={site.url}
-                >
-                  <span className="shortcut-icon">
-                    {site.url.includes('youtube.com') ? '🎬' :
-                     site.url.includes('github.com') ? '🐙' :
-                     site.url.includes('google.com') ? '🔍' :
-                     site.url.includes('startpage.com') ? '🛡️' :
-                     site.url.includes('facebook.com') ? '👥' :
-                     site.url.includes('twitter.com') || site.url.includes('x.com') ? '🐦' : '🌐'}
-                  </span>
-                  <span>{site.title || (site.url.length > 20 ? site.url.substring(0, 20) + '...' : site.url)}</span>
-                </div>
-              ))
+              recentSites.map((site, i) => {
+                const domain = site.url.replace(/^https?:\/\/(www\.)?/, '').split('/')[0];
+                return (
+                  <div 
+                    key={i} 
+                    className="shortcut-item"
+                    onClick={() => MAARK?.navigate(site.url)}
+                    title={site.url}
+                    style={{ background: 'transparent', border: 'none', padding: '4px 8px', fontSize: '12px' }}
+                  >
+                    <span>{site.title || domain}</span>
+                  </div>
+                )
+              })
             )}
           </div>
 
@@ -869,14 +786,25 @@ export default function App() {
             </div>
             
             <div className="sidebar-content">
-              {sidebarTab === 'privacy' && <PrivacyTab config={config} onConfigChange={updateConfig} uaPool={uaPool} t={t} />}
+              {sidebarTab === 'privacy' && <PrivacyTab config={config} onConfigChange={updateConfig} t={t} />}
               {sidebarTab === 'ai' && <AITab config={config} onConfigChange={updateConfig} t={t} />}
               {sidebarTab === 'hymn' && <HymnTab t={t} groqKey={config.groqKey} />}
               {sidebarTab === 'history' && <HistoryTab onNavigate={(url) => { MAARK?.navigate(url); toggleSidebar() }} t={t} />}
             </div>
           </div>
 
-          {activeTab?.url === 'maark://insights' && <PrivacyDashboard onClose={() => MAARK?.closeTab(activeTab.id)} />}
+          {/* Internal pages — match both maark://X and the Vite hash-routed variant */}
+          {(() => {
+            const u = activeTab?.url || ''
+            const isInsights = u.includes('maark://insights') || u.includes('maark%3A%2F%2Finsights') || u.includes('#/maark://insights')
+            const isHome     = u.includes('maark://home')     || u.includes('maark%3A%2F%2Fhome')     || u.includes('#/maark://home')
+            return (
+              <>
+                {isInsights && <PrivacyDashboard onClose={() => MAARK?.closeTab(activeTab.id)} />}
+                {isHome     && <Homepage recentSites={recentSites} onNavigate={(url) => MAARK?.navigate(url)} />}
+              </>
+            )
+          })()}
         </>
       )}
 
@@ -900,6 +828,26 @@ export default function App() {
           MAARK?.answerDownload(id, allow, allow ? 'auto' : null) 
         }}
       />
+
+      {/* Floating AI Chatbot Button */}
+      <button 
+        onClick={() => { setSidebarTab('ai'); setSidebarOpen(true); }}
+        style={{
+          position: 'fixed', bottom: '30px', right: '30px',
+          width: '64px', height: '64px', borderRadius: '50%',
+          background: 'linear-gradient(135deg, var(--accent-violet), var(--accent-cyan))',
+          border: 'none', color: '#fff',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          boxShadow: '0 8px 32px rgba(138,43,226,0.4)',
+          cursor: 'pointer', zIndex: 9999,
+          transition: 'transform 0.2s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.2s cubic-bezier(0.4, 0, 0.2, 1)'
+        }}
+        onMouseOver={(e) => { e.currentTarget.style.transform = 'scale(1.1)'; e.currentTarget.style.boxShadow = '0 12px 40px rgba(138,43,226,0.6)'; }}
+        onMouseOut={(e) => { e.currentTarget.style.transform = 'scale(1)'; e.currentTarget.style.boxShadow = '0 8px 32px rgba(138,43,226,0.4)'; }}
+        title="Ask MAArK AI"
+      >
+        <Bot size={32} color="#fff" />
+      </button>
     </>
   )
 }

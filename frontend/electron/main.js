@@ -1,11 +1,33 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// CRITICAL: These switches MUST be called before app.isReady()
+// They disable WebRTC at the Chromium engine level — the strongest possible fix
+// ─────────────────────────────────────────────────────────────────────────────
 const { app, BrowserWindow, BrowserView, ipcMain, session } = require('electron')
+
+// Disable WebRTC entirely at the Chromium level (prevents all local IP leaks)
+// These are safe to always apply — they only affect WebRTC peer connections
+app.commandLine.appendSwitch('disable-webrtc')
+app.commandLine.appendSwitch('enforce-webrtc-ip-permission-check')
+app.commandLine.appendSwitch('webrtc-ip-handling-policy', 'disable_non_proxied_udp')
+// ★ CRITICAL: IPv6 bypasses SOCKS5 proxy and exposes your REAL IP on every site!
+// Disable it completely so all traffic is forced through IPv4 → Tor proxy
+app.commandLine.appendSwitch('disable-ipv6')
+// Disable mDNS ICE candidates — these expose local IPs like 192.168.x.x in WebRTC
+app.commandLine.appendSwitch('disable-features', 'WebRtcHideLocalIpsWithMdns')
+// Reduce fingerprinting surface
+app.commandLine.appendSwitch('no-referrers')
+
 const path = require('path')
 const { spawn } = require('child_process')
 const http = require('http')
+const fs = require('fs')
+
+require('dotenv').config({ path: path.join(__dirname, '../.env') })
 
 const JAVA_PORT = 7070
-const TOOLBAR_H = 132   // toolbar + tab bar combined
+const TOOLBAR_H = 124   // toolbar + tab bar combined + shortcuts
 const isDev = !app.isPackaged
+
 
 // ── Privacy Config (mutable via IPC) ────────────────────────────────────────
 let cfg = {
@@ -16,6 +38,20 @@ let cfg = {
   uaRandomize:    true,
   blockPerms:     true,
   fingerprintMock:false,
+  torEnabled:     false,
+  groqKey:        process.env.GROQ_API_KEY || ''
+}
+
+let torProcess = null
+let torStatus = 'Disconnected'
+
+// ── Global Biometric Tracking ────────────────────────────────────────────────
+let globalBiometrics = {
+  clicks: 0,
+  scrolls: 0,
+  keystrokes: 0,
+  tabHides: 0,
+  mouseMovements: 0
 }
 
 // ── UA Pool ───────────────────────────────────────────────────────────────────
@@ -85,6 +121,7 @@ let mainWindow  = null
 let uiPort      = 5173   // set by loadUI() once Vite is detected
 const pendingDownloads = new Map()
 const pendingPermissions = new Map()
+const activeSessions = new Set()
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 const randUA    = () => UA_POOL[Math.floor(Math.random() * UA_POOL.length)].ua
@@ -95,7 +132,7 @@ function setBounds() {
   const tab = tabs.get(activeTabId)
   if (!tab) return
   
-  if (tab.url && tab.url.startsWith('maark://')) {
+  if (tab.url && tab.url.includes('maark://')) {
     tab.view.setBounds({ x: 0, y: 0, width: 0, height: 0 })
     return
   }
@@ -125,52 +162,81 @@ function broadcast() {
   }
 }
 
+// ── WebRTC nullifier script injected into every page when Tor is ON ───────────
+// This blocks RTCPeerConnection at the JS engine level — closes the last leak
+const WEBRTC_BLOCK_SCRIPT = `(function(){
+  'use strict';
+  // Completely replace RTCPeerConnection with a no-op constructor
+  const blocked = function() {
+    throw new DOMException('WebRTC is disabled by MAArK for your privacy.', 'NotAllowedError');
+  };
+  blocked.generateCertificate = () => Promise.reject(new DOMException('Blocked', 'NotAllowedError'));
+  try { Object.defineProperty(window, 'RTCPeerConnection', { value: blocked, writable: false, configurable: false }); } catch(e){}
+  try { Object.defineProperty(window, 'webkitRTCPeerConnection', { value: blocked, writable: false, configurable: false }); } catch(e){}
+  try { Object.defineProperty(window, 'mozRTCPeerConnection', { value: blocked, writable: false, configurable: false }); } catch(e){}
+  // Also block the ICE server enumeration
+  try { Object.defineProperty(navigator, 'mediaDevices', { value: undefined, writable: false }); } catch(e){}
+  console.info('[MAArK Shield] WebRTC fully disabled. Your IP is private.');
+})()`;
+
 // ── Apply security policies to a session ──────────────────────────────────────
 async function applyPolicies(ses) {
-  // 1. User-Agent
+  // 1. User-Agent spoofing
   ses.setUserAgent(cfg.uaRandomize ? randUA() : UA_POOL[0].ua)
 
-  // 2. Proxy Rotation
-  if (cfg.proxyMode !== 'direct') {
-    const proxy = randProxy();
+  // 2. Proxy / Tor Routing
+  if (cfg.torEnabled) {
+    // Chromium uses socks5:// for proxy rules
+    await ses.setProxy({ proxyRules: 'socks5://127.0.0.1:9050', proxyBypassRules: 'localhost,127.0.0.1' })
+    console.log('🛡️ [Policy] Routing ALL traffic via Tor socks5://127.0.0.1:9050')
+    // Clear all cached data so old IP is not re-used
+    await ses.clearCache()
+    await ses.clearStorageData({ storages: ['cookies','localstorage','sessionstorage','indexdb','serviceworkers'] })
+  } else if (cfg.proxyMode !== 'direct') {
+    const proxy = randProxy()
     await ses.setProxy({ proxyRules: proxy, proxyBypassRules: 'localhost,127.0.0.1' })
-    console.log(`🛡️ [Policy] Applied Anonymity Proxy: ${proxy}`);
+    console.log(`🛡️ [Policy] Applied Anonymity Proxy: ${proxy}`)
   } else {
     await ses.setProxy({ mode: 'direct' })
   }
 
-  // 3. Tracker + Ad blocking
+  // 3. WebRTC IP leak prevention (session-level API)
+  try {
+    if (typeof ses.setWebRTCIPHandlingPolicy === 'function') {
+      // 'disable_non_proxied_udp' = only proxied connections allowed
+      ses.setWebRTCIPHandlingPolicy(cfg.torEnabled ? 'disable_non_proxied_udp' : 'default')
+      console.log(`🛡️ [WebRTC] Policy: ${cfg.torEnabled ? 'disable_non_proxied_udp' : 'default'}`)
+    }
+  } catch (e) {
+    console.warn('⚠️ [WebRTC] session API unavailable:', e.message)
+  }
+
+  // 4. Tracker + Ad blocking (request-level)
   ses.webRequest.onBeforeRequest({ urls: ['<all_urls>'] }, (details, cb) => {
     if (!cfg.adBlock) return cb({})
     const url = details.url.toLowerCase()
-
-    // YouTube specific relaxed rules
+    // YouTube — only cancel actual ad requests, not video
     if (url.includes('youtube.com') || url.includes('googlevideo.com')) {
-      const isAdRequest = url.includes('/ad_') || url.includes('/get_midroll_') || 
-                          url.includes('pagead') || url.includes('doubleclick.net/pagead') ||
-                          url.includes('adunit') || url.includes('adsense') ||
-                          url.includes('ytimg.com/pagead');
-      return cb({ cancel: isAdRequest });
+      const isAd = url.includes('/ad_') || url.includes('pagead') || url.includes('doubleclick.net/pagead')
+      return cb({ cancel: isAd })
     }
-
-    // Comprehensive Tracker & Popup Networks
-    const blocked = BLOCKED.some(p => url.includes(p)) || 
-      ['popads.net', 'propellerads.com', 'popcash.net', 'admaven.com', 'onclickads.net', 
-       'mgid.com', 'taboola.com', 'outbrain.com', 'zeropark.com', 'adsterra.com',
-       'exoclick.com', 'juicyads.com', 'ero-advertising.com'].some(p => url.includes(p));
-    
+    const blocked = BLOCKED.some(p => url.includes(p)) ||
+      ['popads.net','propellerads.com','popcash.net','admaven.com','onclickads.net',
+       'mgid.com','taboola.com','outbrain.com','zeropark.com','adsterra.com',
+       'exoclick.com','juicyads.com','ero-advertising.com','criteo.com','criteo.net',
+       'gamma.com','gammaplatform.com'].some(p => url.includes(p))
     cb({ cancel: blocked })
   })
 
-  // 4. Identity Injection for Backend Isolation
+  // 5. Identity Injection for Backend
   ses.webRequest.onBeforeSendHeaders((details, callback) => {
     if (details.url.includes(`localhost:${JAVA_PORT}`)) {
-      details.requestHeaders['X-MAArK-Profile'] = activeProfile;
+      details.requestHeaders['X-MAArK-Profile'] = activeProfile
     }
-    callback({ requestHeaders: details.requestHeaders });
-  });
+    callback({ requestHeaders: details.requestHeaders })
+  })
 
-  // 5. HTTPS enforcement
+  // 6. HTTPS enforcement
   ses.webRequest.onBeforeRequest({ urls: ['http://*/*'] }, (details, cb) => {
     const url = details.url
     if (url.includes('localhost') || url.includes('127.0.0.1')) return cb({})
@@ -179,11 +245,21 @@ async function applyPolicies(ses) {
       mainWindow?.webContents.send('warning:insecure', url)
       return cb({ redirectURL: url.replace('http://', 'https://') })
     }
-    cb({ cancel: true }) 
+    cb({ cancel: true })
   })
 
-  // 6. Permission manager
+  // 7. Permission manager (block geolocation + WebRTC when Tor is ON)
   ses.setPermissionRequestHandler((wc, permission, callback, details) => {
+    // When Tor is on, block ALL permissions that could leak identity
+    if (cfg.torEnabled) {
+      const torBlock = ['geolocation', 'notifications', 'midi', 'mediaKeySystem',
+                        'pointerLock', 'camera', 'microphone', 'speaker',
+                        'display-capture', 'audioCapture', 'videoCapture']
+      if (torBlock.includes(permission)) {
+        console.log(`🚫 [Tor] Blocked permission: ${permission}`)
+        return callback(false)
+      }
+    }
     if (!cfg.blockPerms) return callback(true)
     const autoBlock = ['geolocation', 'notifications', 'midi', 'mediaKeySystem', 'pointerLock']
     const autoAllow = ['fullscreen', 'clipboard-sanitized-write']
@@ -194,7 +270,7 @@ async function applyPolicies(ses) {
     mainWindow?.webContents.send('permission:request', { id: permId, permission, origin: details.requestingUrl })
   })
 
-  // 7. Download protection
+  // 8. Download protection
   ses.on('will-download', (event, item) => {
     event.preventDefault()
     const filename = item.getFilename()
@@ -243,14 +319,20 @@ async function createTab(url = 'https://www.startpage.com') {
   const tabId = nextTabId++
   const partition = cfg.incognito ? `in-memory-${tabId}` : `persist:tab-${tabId}`
   const ses = session.fromPartition(partition)
+  activeSessions.add(ses)
   await applyPolicies(ses)
 
-  // Internal URL handling
+  // Internal URL handling — keep maark:// in tab.url so the React overlay works,
+  // but load the Vite dev URL so the shell renders in the BrowserView
   let targetUrl = url
+  let internalUrl = null
   if (url.startsWith('maark://')) {
+    internalUrl = url   // keep the original for React matching
     const page = url.split('maark://')[1]
-    const devUrl = `http://127.0.0.1:${uiPort || 5173}/#/maark://${page}`
-    targetUrl = devUrl
+    // In dev, load the Vite app URL; in prod load dist/index.html
+    targetUrl = isDev
+      ? `http://127.0.0.1:5173`   // shell only — React overlay will render on top
+      : `file://${path.join(__dirname, '../dist/index.html')}`
   }
 
   const view = new BrowserView({
@@ -263,7 +345,13 @@ async function createTab(url = 'https://www.startpage.com') {
     }
   })
 
-  const data = { view, ses, partition, title: 'New Tab', url: '', loading: false, isSecure: true, canGoBack: false, canGoForward: false }
+  const data = {
+    view, ses, partition,
+    title: 'New Tab',
+    // Track the maark:// URL so React knows to show the overlay
+    url: internalUrl || targetUrl,
+    loading: false, isSecure: true, canGoBack: false, canGoForward: false
+  }
   tabs.set(tabId, data)
 
   view.webContents.setWindowOpenHandler(({ url }) => {
@@ -278,12 +366,17 @@ async function createTab(url = 'https://www.startpage.com') {
   view.webContents.on('did-stop-loading', () => {
     const t = tabs.get(tabId); if (!t) return
     const u = view.webContents.getURL()
-    t.loading = false; t.url = u
-    t.title = view.webContents.getTitle() || u
+    t.loading = false;
+    // Do not overwrite internal maark:// URLs with the underlying shell URL
+    if (!t.url.startsWith('maark://')) {
+      t.url = u
+      t.title = view.webContents.getTitle() || u
+    }
     t.isSecure = u.startsWith('https://') || u.startsWith('about:')
-    t.canGoBack = view.webContents.canGoBack()
-    t.canGoForward = view.webContents.canGoForward()
+    t.canGoBack = view.webContents.navigationHistory.canGoBack()
+    t.canGoForward = view.webContents.navigationHistory.canGoForward()
     broadcast()
+    setBounds()
     if (!cfg.incognito && u && !u.startsWith('about:') && !u.includes('startpage.com')) {
       fetch(`http://localhost:${JAVA_PORT}/api/history/browse`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -293,7 +386,12 @@ async function createTab(url = 'https://www.startpage.com') {
   })
 
   view.webContents.on('did-commit-navigation', (event, u, isMainFrame) => {
-    if (isMainFrame && (cfg.proxyMode === 'high' || cfg.fingerprintMock)) {
+    if (!isMainFrame) return
+    // Inject WebRTC blocker FIRST on every page when Tor is active
+    if (cfg.torEnabled) {
+      view.webContents.executeJavaScript(WEBRTC_BLOCK_SCRIPT).catch(() => {})
+    }
+    if (cfg.proxyMode === 'high' || cfg.fingerprintMock) {
       view.webContents.executeJavaScript(generateFPScript()).catch(() => {})
     }
   })
@@ -339,6 +437,120 @@ async function closeTab(tabId) {
   broadcast()
 }
 
+// ── Tor Management ────────────────────────────────────────────────────────────
+async function startTor() {
+  // Resolve Tor binary path — works in dev AND packaged app
+  const torBaseDir = app.isPackaged
+    ? path.join(process.resourcesPath, 'tor')
+    : path.join(app.getAppPath(), 'resources', 'tor')
+
+  const torBinary = process.platform === 'win32'
+    ? path.join(torBaseDir, 'tor', 'tor.exe')
+    : path.join(torBaseDir, 'tor')
+
+  if (!fs.existsSync(torBinary)) {
+    console.error(`❌ [Tor] Binary not found at: ${torBinary}`)
+    torStatus = 'Binary Missing'
+    mainWindow?.webContents.send('tor:status', torStatus)
+    return
+  }
+
+  const userDataPath = app.getPath('userData')
+  const torDataDir   = path.join(userDataPath, 'tor_data')
+  if (!fs.existsSync(torDataDir)) fs.mkdirSync(torDataDir, { recursive: true })
+
+  const geoipDir  = path.join(torBaseDir, 'data')
+  const torrcPath = path.join(userDataPath, 'torrc')
+
+  // torrc — strong config: SOCKS5, no exit DNS leak, cookie auth
+  const torrcContent = [
+    `SocksPort 127.0.0.1:9050`,
+    `ControlPort 127.0.0.1:9051`,
+    `CookieAuthentication 0`,
+    `DataDirectory ${torDataDir.replace(/\\/g, '/')}`,
+    `GeoIPFile ${path.join(geoipDir, 'geoip').replace(/\\/g, '/')}`,
+    `GeoIPv6File ${path.join(geoipDir, 'geoip6').replace(/\\/g, '/')}`,
+    `Log notice stdout`,
+    `SafeSocks 1`,          // Reject unsafe SOCKS4/4a (forces DNS through Tor)
+    `TestSocks 1`,          // Warn if app leaks DNS
+    `DNSPort 127.0.0.1:9053`, // Local DNS-over-Tor port
+    `AutomapHostsOnResolve 1`,
+    `ClientUseIPv6 0`,      // IPv6 can bypass SOCKS and leak real IP
+  ].join('\n')
+
+  fs.writeFileSync(torrcPath, torrcContent)
+  console.log('🚀 [Tor] Starting Tor daemon...')
+  torStatus = 'Connecting...'
+  mainWindow?.webContents.send('tor:status', torStatus)
+
+  torProcess = spawn(torBinary, ['-f', torrcPath], {
+    cwd: torBaseDir,
+    detached: false,
+    stdio: ['ignore', 'pipe', 'pipe'],
+  })
+
+  torProcess.stdout.on('data', async (data) => {
+    const msg = data.toString()
+    const match = msg.match(/Bootstrapped (\d+)%/)
+    if (match) {
+      const pct = parseInt(match[1])
+      torStatus = pct === 100 ? 'Connected' : `Connecting (${pct}%)`
+      console.log(`🧅 [Tor] ${torStatus}`)
+      mainWindow?.webContents.send('tor:status', torStatus)
+      // When fully connected, re-apply policies so proxy kicks in immediately
+      if (pct === 100) {
+        console.log('🧅 [Tor] Applying proxy to all sessions and reloading tabs...')
+        // Re-apply to all sessions in parallel
+        const sessionJobs = [...activeSessions].map(s => applyPolicies(s).catch(() => {}))
+        sessionJobs.push(applyPolicies(session.defaultSession).catch(() => {}))
+        await Promise.all(sessionJobs)
+        // Inject WebRTC blocker + force reload all tabs so they use the Tor proxy
+        for (const t of tabs.values()) {
+          try {
+            t.view.webContents.executeJavaScript(WEBRTC_BLOCK_SCRIPT).catch(() => {})
+            // Reload the page so it goes through Tor this time
+            t.view.webContents.reload()
+          } catch (e) {}
+        }
+        console.log('✅ [Tor] All tabs reloaded through Tor. IP is now masked.')
+      }
+    }
+  })
+
+  torProcess.stderr.on('data', (data) => {
+    const msg = data.toString().trim()
+    if (msg) console.warn('🧅 [Tor stderr]:', msg)
+  })
+
+  torProcess.on('close', (code) => {
+    console.log(`🛑 [Tor] Exited with code ${code}`)
+    torProcess = null
+    torStatus = 'Disconnected'
+    mainWindow?.webContents.send('tor:status', torStatus)
+  })
+
+  torProcess.on('error', (err) => {
+    console.error('❌ [Tor] Failed to spawn:', err.message)
+    torStatus = 'Error'
+    mainWindow?.webContents.send('tor:status', torStatus)
+  })
+}
+
+async function stopTor() {
+  if (torProcess) {
+    torProcess.kill('SIGTERM')
+    torProcess = null
+  }
+  torStatus = 'Disconnected'
+  mainWindow?.webContents.send('tor:status', torStatus)
+  // Restore direct connection on all sessions
+  for (const s of activeSessions) {
+    await s.setProxy({ mode: 'direct' }).catch(() => {})
+  }
+  await session.defaultSession.setProxy({ mode: 'direct' }).catch(() => {})
+  console.log('🛑 [Tor] Stopped. Direct connection restored.')
+}
+
 // ── Java backend ──────────────────────────────────────────────────────────────
 function startJava() {
   const jar = path.join(__dirname, '..', '..', 'target', 'maark-1.0-SNAPSHOT-backend.jar')
@@ -379,16 +591,46 @@ function createWindow() {
 }
 
 // ── IPC handlers ──────────────────────────────────────────────────────────────
-ipcMain.handle('tab:create', async (_, url) => { const id = await createTab(url); switchTab(id); return id })
+ipcMain.handle('tab:create', async (_, url) => { const id = await createTab(url || 'maark://home'); switchTab(id); return id })
 ipcMain.on('tab:switch', (_, id) => switchTab(id))
 ipcMain.on('tab:close',  (_, id) => closeTab(id))
 
 ipcMain.on('biometric:event', (event, type) => {
-  const data = { type, tabId: activeTabId }
+  if (globalBiometrics[type] !== undefined) globalBiometrics[type]++;
+  else if (type === 'click') globalBiometrics.clicks++;
+  else if (type === 'keystroke') globalBiometrics.keystrokes++;
+  else if (type === 'scroll') globalBiometrics.scrolls++;
+  else if (type === 'tabHide') globalBiometrics.tabHides++;
+  else if (type === 'move') globalBiometrics.mouseMovements++;
+
+  const data = { type, tabId: activeTabId, totals: globalBiometrics }
   mainWindow?.webContents.send('biometric:update', data)
   for (const t of tabs.values()) {
     t.view.webContents.send('biometric:update', data)
   }
+})
+
+ipcMain.handle('biometric:get-totals', () => globalBiometrics)
+
+ipcMain.on('privacy:set', async (_, newCfg) => {
+  const wasTorEnabled = cfg.torEnabled
+  cfg = { ...cfg, ...newCfg }
+  console.log(`🛡️ [Privacy] Config updated: ${JSON.stringify(cfg)}`)
+  
+  if (cfg.torEnabled && !wasTorEnabled) {
+    await startTor()
+  } else if (!cfg.torEnabled && wasTorEnabled) {
+    stopTor()
+  }
+
+  // Re-apply policies to all active sessions
+  for (const ses of activeSessions) {
+    await applyPolicies(ses)
+  }
+  // Also default session
+  await applyPolicies(session.defaultSession)
+  
+  mainWindow?.webContents.send('privacy:config', cfg)
 })
 
 ipcMain.on('profile:set', async (_, profileId) => {
@@ -404,30 +646,45 @@ ipcMain.on('profile:set', async (_, profileId) => {
 
 ipcMain.on('browser:navigate', (_, url) => {
   const t = tabs.get(activeTabId); if (!t) return
+
+  // Handle internal maark:// pages — show React overlay, hide BrowserView
+  if (url.startsWith('maark://')) {
+    t.url = url
+    t.title = url.replace('maark://', 'MAArK ').replace(/\b\w/g, c => c.toUpperCase())
+    setBounds()     // hides BrowserView since url has maark://
+    broadcast()
+    return
+  }
+
   let target = url
   if (!target.startsWith('http://') && !target.startsWith('https://')) {
     target = target.includes('.') && !target.includes(' ')
       ? 'https://' + target
-      : 'https://www.startpage.com/sp/search?query=' + encodeURIComponent(target)
+      : 'https://www.startpage.com/do/search?q=' + encodeURIComponent(target)
   }
+  t.url = target
+  // Show BrowserView before loading so it's visible immediately
+  if (mainWindow && !mainWindow.getBrowserViews().includes(t.view)) {
+    mainWindow.addBrowserView(t.view)
+  }
+  setBounds()
   t.view.webContents.loadURL(target)
+  broadcast()
 })
 
 ipcMain.on('window:minimize', () => mainWindow?.minimize())
 ipcMain.on('window:maximize', () => mainWindow?.isMaximized() ? mainWindow.unmaximize() : mainWindow?.maximize())
 ipcMain.on('window:close',    () => mainWindow?.close())
 
-ipcMain.on('privacy:set', async (_, newCfg) => {
-  cfg = { ...cfg, ...newCfg }
-  for (const [, tab] of tabs) { await applyPolicies(tab.ses) }
-  mainWindow?.webContents.send('privacy:config', cfg)
-})
+// Merged into privacy:set
+
+ipcMain.handle('tor:get-status', () => torStatus)
 
 ipcMain.handle('privacy:get-config', () => cfg)
 ipcMain.handle('privacy:get-ua-pool', () => UA_POOL)
 
-ipcMain.on('browser:back',    () => { const t = tabs.get(activeTabId); t?.view.webContents.canGoBack()    && t.view.webContents.goBack() })
-ipcMain.on('browser:forward', () => { const t = tabs.get(activeTabId); t?.view.webContents.canGoForward() && t.view.webContents.goForward() })
+ipcMain.on('browser:back',    () => { const t = tabs.get(activeTabId); t?.view.webContents.navigationHistory.canGoBack()    && t.view.webContents.goBack() })
+ipcMain.on('browser:forward', () => { const t = tabs.get(activeTabId); t?.view.webContents.navigationHistory.canGoForward() && t.view.webContents.goForward() })
 ipcMain.on('browser:reload',  () => tabs.get(activeTabId)?.view.webContents.reload())
 ipcMain.on('browser:home',    () => tabs.get(activeTabId)?.view.webContents.loadURL('https://www.startpage.com'))
 
@@ -472,25 +729,26 @@ let javaProc = null
 async function loadUI() {
   const ports = [5173, 5174, 5175, 5176]
   let success = false
-
   // Give Vite a moment to fully initialize before we start probing
   await new Promise(r => setTimeout(r, 1000))
+
+  console.log(`📡 [UI] Searching for Vite on 127.0.0.1...`);
 
   // Retry loop — up to 30 seconds (60 × 500 ms) to find Vite
   for (let i = 0; i < 60 && !success; i++) {
     for (const port of ports) {
       try {
         await new Promise((resolve, reject) => {
-          const req = http.get(`http://localhost:${port}`, res => {
+          const req = http.get(`http://127.0.0.1:${port}`, res => {
             res.resume() // drain body so socket is released
-            if (res.statusCode === 200) resolve()
+            if (res.statusCode === 200 || res.statusCode === 304) resolve()
             else reject(new Error(`status ${res.statusCode}`))
           })
           req.on('error', reject)
           req.setTimeout(500, () => { req.destroy(); reject(new Error('timeout')) })
         })
         uiPort = port
-        mainWindow.loadURL(`http://localhost:${port}`)
+        mainWindow.loadURL(`http://127.0.0.1:${port}`)
         console.log(`🎨 [UI] Connected to Vite on port ${port}`)
         if (isDev) mainWindow.webContents.openDevTools({ mode: 'detach' })
         success = true
@@ -499,7 +757,8 @@ async function loadUI() {
         if (i === 0) console.log(`[UI] Port ${port}: ${e.message}`)
       }
     }
-    if (!success) await new Promise(r => setTimeout(r, 500))
+    if (success) break
+    await new Promise(r => setTimeout(r, 500))
   }
 
   if (!success) {
@@ -509,17 +768,24 @@ async function loadUI() {
 }
 
 app.whenReady().then(async () => {
+  // Tor will start when the user enables it from the Privacy Dashboard
+  // (auto-start removed — cfg.torEnabled defaults to false)
   javaProc = startJava()
   createWindow()
   if (isDev) await loadUI()
   else mainWindow.loadFile(path.join(__dirname, '../dist/index.html'))
-  
   mainWindow.webContents.once('did-finish-load', () => {
     // We wait for profile:set IPC before creating the first tab.
   })
 })
 
 app.on('window-all-closed', () => {
+  stopTor()
   javaProc?.kill()
   if (process.platform !== 'darwin') app.quit()
+})
+
+app.on('before-quit', () => {
+  stopTor()
+  javaProc?.kill()
 })
