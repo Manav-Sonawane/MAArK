@@ -33,5 +33,3 @@ build/
 ehthumbs.db
 Thumbs.db
 
-# Tor Binaries
-frontend/resources/tor/
