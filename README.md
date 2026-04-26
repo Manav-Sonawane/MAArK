@@ -1,106 +1,118 @@
-# 🎯 MAArK: Privacy-First Intelligent Browser
+<p align="center">
+  <img src="assets/logo.png" alt="MAArK Browser Logo" width="200" onerror="this.style.display='none'"/>
+</p>
 
-MAArK is a privacy-first intelligent browser designed to fundamentally change how users interact with the web. Instead of reacting to problems (like removing ads after they load), **the system prevents unwanted content from ever reaching the user**. It also integrates AI-powered assistance and a unique audio-based hymn recognition system.
+# 🎯 MAArK: Privacy-First Parallel Meta-Search Browser
+
+[![Java 17](https://img.shields.io/badge/Java-17-blue.svg)](https://openjdk.java.net/)
+[![JavaFX](https://img.shields.io/badge/JavaFX-21-orange.svg)](https://openjfx.io/)
+[![Maven](https://img.shields.io/badge/Build-Maven-success.svg)](https://maven.apache.org/)
+
+MAArK is a high-performance, privacy-first meta-search engine and browser built entirely in **Java 17** and **JavaFX**. Designed to keep your data secure, MAArK searches multiple engines simultaneously without compromising your identity, aggregating results locally via a powerful multithreaded architecture.
+
+---
+
+## ✨ Features
+
+### 🛡️ Privacy-First Search
+- **No Tracking:** Queries are performed directly from your local machine to external APIs without intermediaries storing your search history.
+- **Parallel Meta-Search:** Instantly aggregates results from top providers:
+  - DuckDuckGo
+  - Wikipedia
+  - StackOverflow
+  - Reddit
+  - HackerNews
+
+### 🚀 High-Performance Architecture
+- **Shared ExecutorService Thread Pool:** Efficient parallel network requests with minimal overhead.
+- **Shared HTTP Context:** Optimized `HttpClient` and Jackson `ObjectMapper` instances reduce memory footprint and improve search latency.
+
+### 🧩 Local History Management
+- **Search & Browsing History:** Complete local JSON-based history storage (`search_history.json`, `browse_history.json`).
+- **Data Limits:** Automatically caps history entries to keep the application fast and lightweight.
+
+### 🎨 Modern UI (JavaFX)
+- **Built-in WebView:** Render search results and surf the web natively.
+- **Dark/Light Mode:** Responsive themes.
+- **Interactive Results:** Clean, list-based results rendering using custom JavaFX `ListCell` formatting.
 
 ---
 
 ## 🏗️ System Architecture
 
-MAArK employs a modern, decoupled architecture:
+MAArK employs a modular Java-based architecture:
 
 ```text
-Electron Frontend (UI + Browser Engine)
-        ↓
-Request Interception Layer (Electron APIs)
-        ↓
-Java Backend (Proxy + Processing Layer)
-        ↓
-External APIs (Groq, Audio Recognition)
-        ↓
-Internet
+JavaFX UI (MaarkApp, SearchController)
+        │
+        ▼
+Service Layer (SearchService, HistoryManager)
+        │
+        ├─► Multi-threaded Provider Execution (ExecutorService)
+        │     ├── WikipediaProvider
+        │     ├── DuckDuckGoProvider
+        │     ├── RedditProvider
+        │     └── ...
+        │
+        ▼
+External APIs (HTTP/2 Client)
 ```
 
-### 🧠 How Data Actually Flows
-1. User enters a website.
-2. Electron starts loading resources (HTML, JS, images, ads).
-3. **Each request is intercepted** before it hits the network.
-4. The system decides: **Allow** ✅ or **Block** ❌.
-5. Allowed requests go through a secure proxy (optional).
-6. The page renders quickly without ads, tracking, or bloat.
+---
+
+## 🛠️ Tech Stack
+- **Language:** Java 17
+- **UI Framework:** JavaFX 21 (Controls, Graphics, Web)
+- **Build Tool:** Maven
+- **JSON Processing:** Jackson (`jackson-databind`)
+- **Networking:** Java `java.net.http.HttpClient`
 
 ---
 
-## 🔒 Module 1: Ad-Free & Privacy Engine (Core System)
+## 📦 Installation & Setup
 
-### 1. Request Interception & Filtering
-Every website loads main content (needed), ads (unwanted), and trackers (invisible but harmful). Instead of hiding ads after they load, MAArK uses `session.webRequest.onBeforeRequest` to act as a gatekeeper. Requests to known ad networks (e.g., `doubleclick.net`) are blocked at the network level, conserving bandwidth and removing ads entirely without breaking main content.
+### Prerequisites
+- JDK 17+ installed on your system.
+- Maven 3.6+ installed.
 
-### 2. Cosmetic Filtering (UI Cleanup)
-Even after blocking requests, empty layout boxes may remain. MAArK injects CSS (`display: none !important`) to visually clean the page and remove ad banners.
+### Build Instructions
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/Manav-Sonawane/MAArK.git
+   cd MAArK
+   ```
+2. Build the project using Maven:
+   ```bash
+   mvn clean install
+   ```
 
-### 3. Tracker Blocking
-Trackers monitor clicks, collect behavior, and build user profiles. MAArK blocks analytics endpoints (e.g., `google-analytics.com`), ensuring user data is never leaked.
-
-### 4. Proxy-Based IP Masking
-- **Without proxy:** User → Website (IP visible)
-- **With proxy:** User → Java Proxy → Website (Website sees proxy IP, not the user's)
-*(Note: Embedded ads, such as YouTube video stream ads, are harder to block as they originate from the same domain as the content).*
-
----
-
-## 🤖 Module 2: AI Integration (Groq API)
-
-The browser is not just a viewer, but an active assistant.
-- **Internal Flow:** User clicks "Summarize" → Electron extracts page text → Sends to Java backend → Backend calls Groq API → Response sent back to UI.
-- **Features:**
-  - **Page Summarization:** Extracts text and reduces it into key points.
-  - **Translation:** Sends content with language instructions (e.g., "Translate to Marathi").
-  - **Hymn Hint System:** Provides melody style hints instead of direct answers if the user is stuck.
-  - **Image Captioning:** Sends image URLs to the AI to get descriptions.
+### Run Instructions
+To launch the MAArK browser, run the JavaFX Maven plugin:
+```bash
+mvn javafx:run
+```
 
 ---
 
-## 🌐 Module 3: Language System (i18n)
-
-Instead of hardcoding text, MAArK uses a dynamic JSON-based translation system:
-- User selects a language (English, Hindi, Marathi).
-- Loads corresponding JSON dictionary.
-- Replaces UI text dynamically.
-- **Benefit:** One app supports multiple languages and integrates seamlessly with localized AI responses.
-
----
-
-## 🎵 Module 4: Audio-Based Hymn Recognition
-
-**Core Idea:** User hums → system finds the closest match.
-- **Step 1: Audio Capture:** Uses `getUserMedia({ audio: true })` to record the raw waveform.
-- **Step 2: Feature Extraction:** Converts raw audio into pitch (frequency) and tone patterns (e.g., 440Hz → 494Hz → 523Hz).
-- **Step 3: Matching Logic:** Sends audio to a recognition API or uses custom pattern matching (similarity/sequence alignment) against a stored database of hymn patterns.
-- **Step 4: Output:** Shows the best match, plays the original audio, and displays a confidence score. *(Challenge: Real-world noise and off-key singing make results approximate).*
+## 🗺️ Roadmap
+- [x] **Phase 1:** Core UI & Browser Engine Setup.
+- [x] **Phase 2:** Parallel API Search Integrations.
+- [x] **Phase 3:** Result Parsing & Modeling.
+- [x] **Phase 4:** Local History System & Architectural Optimizations.
+- [ ] **Phase 5:** Proxy-Based IP Masking & Ad-blocking at the WebView Level.
+- [ ] **Phase 6:** AI Summarization Integration (Groq API).
 
 ---
 
-## 🖼️ Module 5: Image Tools
-
-Makes the browser smarter with visual understanding.
-- **Flow:** User right-clicks an image → Sends image URL to backend → AI analyzes → Returns description or context.
-
----
-
-## 🎨 User Interface & Controls
-- **Layout:** Top URL bar, Side AI Panel, Main WebView, and dedicated Tab for Hymn recognition.
-- **Controls:** Ad Block toggle, Tracker Block toggle, Proxy toggle, and Language selector.
-- **Dashboard:** Displays real-time metrics for ads blocked, trackers blocked, and current privacy level.
+## 🤝 Contributing
+Contributions are welcome! Please ensure that your code adheres to our modular architecture and keeps privacy at the forefront. 
+1. Fork the project.
+2. Create your feature branch (`git checkout -b feature/AmazingFeature`).
+3. Commit your changes (`git commit -m 'Add some AmazingFeature'`).
+4. Push to the branch (`git push origin feature/AmazingFeature`).
+5. Open a Pull Request.
 
 ---
 
-## 🚀 Development Strategy & Roadmap
-
-- [x] **Phase 1 (Core):** Browser UI, Request interception, Basic ad blocking.
-- [x] **Phase 2:** Groq AI panel integration.
-- [x] **Phase 3:** Language system (i18n) implementation.
-- [x] **Phase 4:** Audio recognition engine.
-- [x] **Phase 5:** Image tools and visual analysis.
-
----
-*Built for security, speed, and intelligence.*
+## 📜 License
+Distributed under the MIT License. Built for security, speed, and intelligence.
